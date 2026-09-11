@@ -4,6 +4,17 @@ Basecamp CLI for agents, built to the [AXI](https://github.com/kunchenguid/axi) 
 
 Wraps the official [`basecamp`](https://github.com/basecamp/basecamp-cli) CLI with token-efficient TOON output, contextual next-step suggestions, definitive empty states, idempotent mutations, and structured errors. Built for autonomous agents that talk to Basecamp through shell execution.
 
+## Benchmarks
+
+Agent ergonomics is measurable. The harness in [`bench/`](bench/) runs the same 10 read-only Basecamp tasks (assignments across projects, overdue work, message comment threads, card counts, URL resolution, a not-found case, and more) through two conditions, 3 repeats each, with `claude-sonnet-5` as the agent and an LLM judge scoring task success.
+
+| Condition        | Success  | Avg Input Tokens | Avg Cost/Task | Avg Duration | Avg Turns |
+| ---------------- | -------- | ---------------- | ------------- | ------------ | --------- |
+| **basecamp-axi** | **100%** | **105,981**      | **$0.040**    | **8.1s**     | **3**     |
+| basecamp CLI     | 100%     | 162,194          | $0.070        | 14.1s        | 5         |
+
+Same success rate with 35% fewer input tokens, 43% lower cost, and 43% less wall-clock time. The gap is widest on cross-project work: "what is assigned to me and what is overdue" took the raw CLI agent 12 turns walking projects, against 4 for basecamp-axi's single report. Full write-up and per-task numbers: [`bench/published-results/STUDY.md`](bench/published-results/STUDY.md).
+
 ## Quick start
 
 Requires Node 20+ and the `basecamp` CLI installed and authenticated (`basecamp auth login`).
