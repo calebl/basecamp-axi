@@ -10,7 +10,7 @@
  * 6. Append to results.jsonl
  */
 
-import { execSync, type ExecSyncOptionsWithStringEncoding } from "node:child_process";
+import { execFileSync, execSync, type ExecFileSyncOptionsWithStringEncoding } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync, appendFileSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 
@@ -160,13 +160,15 @@ function runAgent(
     // harness behaviour of bypassing the permission system entirely.
     const permissionArgs = process.env.BENCH_SKIP_PERMISSIONS === "1"
       ? ["--dangerously-skip-permissions"]
-      : ["--permission-mode", "dontAsk", "--allowedTools", ...condition.allowed_tools.map((t) => JSON.stringify(t))];
+      : ["--permission-mode", "dontAsk", "--allowedTools", ...condition.allowed_tools];
+    // Arguments are passed as an array (no shell), so backticks or quotes in the
+    // prompt and instructions are never interpreted.
     cmd = [
-      "claude", "--setting-sources", "''",
-      "-p", JSON.stringify(task.prompt),
+      "claude", "--setting-sources", "",
+      "-p", task.prompt,
       // --setting-sources '' also disables project CLAUDE.md loading, so the
       // condition's tool instructions are injected into the system prompt.
-      "--append-system-prompt", JSON.stringify(condition.agents_md),
+      "--append-system-prompt", condition.agents_md,
       "--model", spec.model,
       "--output-format", "stream-json",
       "--verbose",
@@ -183,20 +185,21 @@ function runAgent(
       "--dangerously-bypass-approvals-and-sandbox",
       "-C", workspaceDir,
       "--ephemeral",
-      JSON.stringify(task.prompt),
+      task.prompt,
     ];
   }
 
   const startTime = Date.now();
   let agentOutput = "";
   try {
-    agentOutput = execSync(cmd.join(" "), {
+    agentOutput = execFileSync(cmd[0], cmd.slice(1), {
       encoding: "utf-8",
       timeout: 5 * 60 * 1000,
       stdio: ["pipe", "pipe", "pipe"],
+      maxBuffer: 64 * 1024 * 1024,
       env: { ...process.env },
       cwd: workspaceDir,
-    } as ExecSyncOptionsWithStringEncoding);
+    } as ExecFileSyncOptionsWithStringEncoding);
   } catch (err: unknown) {
     const execErr = err as { stdout?: string; stderr?: string };
     agentOutput = execErr.stdout ?? "";

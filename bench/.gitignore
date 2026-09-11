@@ -2,3 +2,4 @@ node_modules
 results/*
 !results/.gitkeep
 results-v1-no-instructions/
+results-v2-shell-leak/
