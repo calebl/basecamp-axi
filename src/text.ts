@@ -25,6 +25,10 @@ export function htmlToText(html: string | null | undefined): string {
       const label = inner.replace(/<[^>]+>/g, "").trim();
       return label && label !== href ? `${label} (${href})` : href;
     })
+    .replace(/<bc-attachment[^>]*content-type="application\/vnd\.basecamp\.mention"[^>]*>.*?<\/bc-attachment>/gis, (m: string) => {
+      const name = /alt="([^"]*)"/.exec(m)?.[1] ?? /title="([^",]*)/.exec(m)?.[1];
+      return name ? `@${name}` : "@mention";
+    })
     .replace(/<bc-attachment[^>]*>.*?<\/bc-attachment>/gis, "[attachment]")
     .replace(/<[^>]+>/g, "");
   text = text.replace(/&(#?\w+);/g, (m, name: string) => {

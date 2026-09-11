@@ -42,7 +42,13 @@ async function list(args: string[], ctx: CliContext | undefined): Promise<string
   }
   const bcArgs = ctx?.project ? ["people", "list", "--project", ctx.project.value] : ["people", "pingable"];
   const result = await bc(bcArgs, { account: ctx?.account });
-  const all = asList<Row>(result.data);
+  let all = asList<Row>(result.data);
+  // Project rosters omit the mention SGID; merge it in from the pingable list when requested.
+  if (ctx?.project && wanted.includes("sgid")) {
+    const pingable = asList<Row>((await bc(["people", "pingable"], { account: ctx?.account })).data);
+    const byId = new Map(pingable.map((p) => [String(p.id), p.attachable_sgid]));
+    all = all.map((p) => ({ ...p, attachable_sgid: p.attachable_sgid ?? byId.get(String(p.id)) }));
+  }
   const people = all.slice(0, limit);
   if (people.length === 0) return `people: 0 people found${ctx?.project ? ` in project ${ctx.project.value}` : ""}`;
   const schema: Record<string, (p: Row) => unknown> = {
@@ -55,8 +61,8 @@ async function list(args: string[], ctx: CliContext | undefined): Promise<string
     countLine({ count: people.length, total: all.length, limit }),
     renderList("people", people, schema),
     renderHelp([
-      "Run `basecamp-axi people view <id>` for the mention SGID and email",
-      "Mention someone deterministically with `[@Name](person:<id>)` in comment or message text",
+      "Run `basecamp-axi people view <id>` for a ready-to-paste mention handle",
+      "Mention someone with `[@Name](mention:<sgid>)` in comment or message text (`--fields sgid` adds the sgid column)",
     ]),
   ]);
 }
@@ -72,7 +78,7 @@ async function view(args: string[], ctx: CliContext | undefined): Promise<string
     title: (p) => p.title,
     company: (p) => p.company?.name,
     role: (p) => (p.admin ? "admin" : p.client ? "client" : p.employee ? "employee" : "member"),
-    mention: (p) => (p.attachable_sgid ? `[@${p.name}](mention:${p.attachable_sgid})` : `[@${p.name}](person:${p.id})`),
+    mention: (p) => (p.attachable_sgid ? `[@${p.name}](mention:${p.attachable_sgid})` : `@${String(p.name).replace(/\s+/g, ".")}`),
   });
 }
 

@@ -10,6 +10,11 @@ test("htmlToText flattens Basecamp rich text", () => {
   assert.equal(htmlToText(html), "Priority: 1\n\n- CE & D365\n- **Bold** item");
 });
 
+test("htmlToText renders Basecamp mentions as @Name", () => {
+  const html = '<p>Hi <bc-attachment sgid="x" content-type="application/vnd.basecamp.mention"><figure><img alt="Jay Park" title="Jay Park"></figure></bc-attachment> and <bc-attachment sgid="y" content-type="image/png"></bc-attachment></p>';
+  assert.equal(htmlToText(html), "Hi @Jay Park and [attachment]");
+});
+
 test("truncate reports total size only when clipping", () => {
   assert.deepEqual(truncate("abc", 5), { text: "abc", truncated: false, total: 3 });
   const t = truncate("a".repeat(20), 5);

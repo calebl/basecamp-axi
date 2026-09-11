@@ -34,7 +34,8 @@ basecamp-axi card move 10247705680 --to Done --card-table 9407211666 --in 443617
 basecamp-axi message list --in 48189809
 basecamp-axi message create "Status" --body-file notes.md --in 48189809
 basecamp-axi comment list 10126503472 --in 48189809
-basecamp-axi comment create 10126503472 "Thanks [@Jay Park](person:50519852)" --in 48189809
+basecamp-axi people view 50519852                     # prints a ready-to-paste [@Jay Park](mention:<sgid>) handle
+basecamp-axi comment create 10126503472 "Thanks [@Jay Park](mention:<sgid>)" --in 48189809
 basecamp-axi chat post "Deployed" --in 48189809 --campfire 9169930018
 basecamp-axi people list --in 48189809 --fields email,sgid
 basecamp-axi search "pull sheet"

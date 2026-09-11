@@ -43,7 +43,7 @@ Run `npx -y basecamp-axi --help` for global flags, or `npx -y basecamp-axi <comm
 
 - Output is TOON-encoded and token-efficient; pipe through grep/head only when a list is very long.
 - `todo done` and `todo reopen` are idempotent: an already-done todo reports `already done (no-op)` with exit 0.
-- Message bodies and comment text accept Markdown. Mention people deterministically with `[@Name](person:<id>)`; find ids with `people list` or `people view <id>`.
+- Message bodies and comment text accept Markdown. Mention people with `[@Name](mention:<sgid>)`; `people view <id>` prints the exact handle and `people list --fields sgid` adds the sgid column. The `person:<id>` form is not reliable.
 - For multi-line text, write it to a UTF-8 file and pass `--body-file <path>` (messages, comments) or `--description-file <path>` (todos).
 - Cards: column names are resolved to ids automatically (`card move <id> --to Done`); pass `--card-table <id>` only when a project has several tables.
 - A `TOOL_DISABLED` error means the project has that Basecamp tool turned off; `project view <id>` lists the enabled tools. A `DEPENDENCY_OUTDATED` error means the installed `basecamp` CLI lacks a flag; ask the user to run `basecamp upgrade`.

@@ -5,6 +5,10 @@ import { AxiError } from "../errors.js";
 import { countLine, names, renderDetail, renderHelp, renderList, renderOutput, type Row } from "../toon.js";
 import { dueStatus, htmlToText, preview, relativeTime, truncate } from "../text.js";
 
+function numeric(id: string): number | string {
+  return /^\d+$/.test(id) ? Number(id) : id;
+}
+
 /** Titles are normally plain, but cards surfaced by reports carry HTML content. */
 export function cleanTitle(value: unknown): string {
   const s = String(value ?? "");
@@ -212,11 +216,11 @@ async function toggle(args: string[], ctx: CliContext | undefined, action: "done
     const before = await bc<Row>(["todos", "show", id], { project: ctx?.project, account: ctx?.account }).catch(() => undefined);
     const wantCompleted = action === "done";
     if (before && Boolean(before.data.completed) === wantCompleted) {
-      rows.push({ id: before.data.id, title: before.data.content, result: `already ${wantCompleted ? "done" : "open"} (no-op)` });
+      rows.push({ id: before.data.id, title: before.data.title ?? before.data.content, result: `already ${wantCompleted ? "done" : "open"} (no-op)` });
       continue;
     }
     await bc(["todos", action === "done" ? "complete" : "uncomplete", id], { project: ctx?.project, account: ctx?.account });
-    rows.push({ id: before?.data.id ?? id, title: before?.data.content ?? "?", result: wantCompleted ? "completed" : "reopened" });
+    rows.push({ id: before?.data.id ?? numeric(id), title: before?.data.title ?? before?.data.content ?? "?", result: wantCompleted ? "completed" : "reopened" });
   }
   return renderOutput([
     renderList("todos", rows, { id: (r) => r.id, title: (r) => r.title, result: (r) => r.result }),
@@ -238,7 +242,7 @@ async function assign(args: string[], ctx: CliContext | undefined, action: "assi
   const verified: Row[] = [];
   for (const id of ids) {
     const after = await bc<Row>(["todos", "show", id], { project, account: ctx?.account }).catch(() => undefined);
-    verified.push({ id, title: after?.data.content ?? "?", assignees: names(after?.data.assignees) });
+    verified.push({ id: after?.data.id ?? numeric(id), title: after?.data.title ?? after?.data.content ?? "?", assignees: names(after?.data.assignees) });
   }
   return renderOutput([
     renderList("todos", verified, { id: (r) => r.id, title: (r) => r.title, assignees: (r) => r.assignees }),
