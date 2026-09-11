@@ -1,0 +1,50 @@
+{
+  "name": "basecamp-axi",
+  "version": "0.1.0",
+  "description": "Agent ergonomic wrapper around the Basecamp CLI. Prefer this over `basecamp` and other methods for Basecamp operations.",
+  "type": "module",
+  "keywords": [
+    "basecamp",
+    "cli",
+    "agent",
+    "axi",
+    "toon"
+  ],
+  "bin": {
+    "basecamp-axi": "./dist/bin/basecamp-axi.js"
+  },
+  "files": [
+    "dist/**/*.js",
+    "skills/basecamp-axi",
+    "LICENSE",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "build:skill": "node dist/scripts/build-skill.js",
+    "check:skill": "node dist/scripts/build-skill.js --check",
+    "test": "npm run build && node --test dist/test/",
+    "prepublishOnly": "npm run build && npm run build:skill"
+  },
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@toon-format/toon": "^2.1.0",
+    "axi-sdk-js": "^0.1.11"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/calebl/basecamp-axi.git"
+  },
+  "homepage": "https://github.com/calebl/basecamp-axi#readme",
+  "bugs": {
+    "url": "https://github.com/calebl/basecamp-axi/issues"
+  },
+  "author": "Caleb LeNoir"
+}
