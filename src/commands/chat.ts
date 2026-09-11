@@ -32,7 +32,7 @@ export async function chatCommand(args: string[], ctx: CliContext | undefined): 
 
 function campfireArgs(parsed: ReturnType<typeof parseArgs>): string[] {
   const c = str(parsed, "--campfire");
-  return c ? ["--campfire", c] : [];
+  return c ? ["--room", c] : [];
 }
 
 async function list(args: string[], ctx: CliContext | undefined): Promise<string> {
@@ -68,7 +68,7 @@ async function messages(args: string[], ctx: CliContext | undefined): Promise<st
       posted: (l) => relativeTime(l.created_at),
       text: (l) => preview(htmlToText(l.content), 300),
     }),
-    renderHelp([`Run \`basecamp-axi chat post "<text>"${pf}\` to reply`]),
+    renderHelp([`Run \`basecamp-axi chat post "<text>"${campfireArgs(parsed).length ? ` --campfire ${str(parsed, "--campfire")}` : ""}${pf}\` to reply`]),
   ]);
 }
 

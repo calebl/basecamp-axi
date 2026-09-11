@@ -83,15 +83,4 @@ Cross-project commands need no scope: `project list`, `report`, `search`, `peopl
 
 ### Compatibility with the basecamp CLI
 
-Tested against basecamp CLI 0.4.0. Flags that version lacks (for example `card move --position`) surface as `DEPENDENCY_OUTDATED` with a hint to run `basecamp upgrade`. `card update` re-sends the current due date because the wrapped CLI otherwise clears it.
-
-## Development
-
-```sh
-npm install
-npm run build          # tsc -> dist/
-npm test               # build + node --test
-npm run build:skill    # regenerate skills/basecamp-axi/SKILL.md from the CLI's own help
-npm run check:skill    # fail if the committed skill is stale
-node dist/bin/basecamp-axi.js <command>
-```
+Tested against basecamp CLI 0.11.0 (also exercised on 0.4.0). basecamp-axi calls only long-form subcommands (`todos create`, `comments create`, and so on), so it works whether or not a version ships the short aliases. Flags the installed version lacks surface as `DEPENDENCY_OUTDATED` with a hint to upgrade. `card update` re-sends the current due date because older CLIs otherwise clear it.

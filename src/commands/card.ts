@@ -191,7 +191,7 @@ async function create(args: string[], ctx: CliContext | undefined): Promise<stri
   const rawColumn = str(parsed, "--column");
   const column = rawColumn ? await resolveColumn(rawColumn, parsed, ctx, project) : undefined;
   if (!column) throw new AxiError("--column is required", "VALIDATION_ERROR", [`Run \`basecamp-axi card columns${projectFlag(ctx)}\` to find column ids`]);
-  const bcArgs = ["card", title];
+  const bcArgs = ["cards", "create", title];
   const body = str(parsed, "--body");
   if (body) bcArgs.push(body);
   bcArgs.push("--column", column, ...tableArgs(parsed));

@@ -20,6 +20,12 @@ export function mapBasecampError(failure: BasecampFailure, exitCode: number): Ax
   const code = (failure.code ?? "").toLowerCase();
   const hint = failure.hint?.trim();
 
+  if (/does not have an on-hold section/i.test(message)) {
+    return new AxiError(stripUrls(message), "VALIDATION_ERROR", [
+      "Move the card to a column that has an on-hold section, or enable on-hold on that column in Basecamp first",
+    ]);
+  }
+
   if (code === "usage" || exitCode === 1) {
     const unknownOpt = /^Unknown option: (--?\S+)/.exec(message);
     if (unknownOpt) {

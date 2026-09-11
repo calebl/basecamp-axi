@@ -101,7 +101,7 @@ async function create(args: string[], ctx: CliContext | undefined): Promise<stri
   const project = requireProject(ctx, "message create");
   const title = requirePositional(parsed, 0, "title", 'basecamp-axi message create "<title>" --body "<markdown>" --in <project>');
   const body = (await readBody(str(parsed, "--body"), str(parsed, "--body-file"), "--body")) ?? "";
-  const bcArgs = ["message", title, body];
+  const bcArgs = ["messages", "create", title, body];
   if (bool(parsed, "--draft")) bcArgs.push("--draft");
   if (bool(parsed, "--no-subscribe")) bcArgs.push("--no-subscribe");
   const result = await bc<Row>(bcArgs, { project, account: ctx?.account });

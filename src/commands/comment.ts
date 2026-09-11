@@ -64,7 +64,7 @@ async function create(args: string[], ctx: CliContext | undefined): Promise<stri
   const project = requireProject(ctx, "comment create");
   const text = await readBody(parsed.positionals[1], str(parsed, "--body-file"), "--body");
   if (!text || text.trim() === "") requirePositional(parsed, 1, "text", 'basecamp-axi comment create <id|url> "<text>" --in <project>');
-  const result = await bc<Row>(["comment", id, text as string], { project, account: ctx?.account });
+  const result = await bc<Row>(["comments", "create", id, text as string], { project, account: ctx?.account });
   const c = result.data ?? {};
   return renderOutput([
     renderDetail("created", c, {

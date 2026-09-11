@@ -178,7 +178,7 @@ async function create(args: string[], ctx: CliContext | undefined): Promise<stri
   const parsed = parseArgs(args, CREATE_FLAGS, { command: "todo create", maxPositionals: 1 });
   const project = requireProject(ctx, "todo create");
   const content = requirePositional(parsed, 0, "content", 'basecamp-axi todo create "<content>" --in <project>');
-  const bcArgs = ["todo", content];
+  const bcArgs = ["todos", "create", content];
   const todolist = str(parsed, "--list");
   const to = str(parsed, "--to");
   const due = str(parsed, "--due");
@@ -215,7 +215,7 @@ async function toggle(args: string[], ctx: CliContext | undefined, action: "done
       rows.push({ id: before.data.id, title: before.data.content, result: `already ${wantCompleted ? "done" : "open"} (no-op)` });
       continue;
     }
-    await bc([action, id], { project: ctx?.project, account: ctx?.account });
+    await bc(["todos", action === "done" ? "complete" : "uncomplete", id], { project: ctx?.project, account: ctx?.account });
     rows.push({ id: before?.data.id ?? id, title: before?.data.content ?? "?", result: wantCompleted ? "completed" : "reopened" });
   }
   return renderOutput([
