@@ -16,7 +16,13 @@ basecamp-axi setup hooks     # optional: ambient context at the start of every a
 
 `setup hooks` installs a `SessionStart` hook for Claude Code, Codex, and OpenCode. Restart your agent session afterwards.
 
-Prefer on-demand loading instead? Install the skill (`skills/basecamp-axi/SKILL.md`) into `~/.claude/skills/` or your agent's skills directory. The skill teaches the agent to run `npx -y basecamp-axi ...`, so no global install is needed. Use the hook, the skill, or both.
+Prefer on-demand loading instead? Install the skill in the [Agent Skills](https://agentskills.io) format:
+
+```sh
+npx skills add calebl/basecamp-axi --skill basecamp-axi -g
+```
+
+The skill teaches the agent to run `npx -y basecamp-axi ...`, so no global install is needed. `-g` installs it for every project; drop it to install into the current project only. Use the hook, the skill, or both.
 
 ## Usage
 
