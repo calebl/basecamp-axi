@@ -85,3 +85,27 @@ Cross-project commands need no scope: `project list`, `report`, `search`, `peopl
 ### Compatibility with the basecamp CLI
 
 Tested against basecamp CLI 0.11.0 (also exercised on 0.4.0). basecamp-axi calls only long-form subcommands (`todos create`, `comments create`, and so on), so it works whether or not a version ships the short aliases. Flags the installed version lacks surface as `DEPENDENCY_OUTDATED` with a hint to upgrade. `card update` re-sends the current due date because older CLIs otherwise clear it.
+
+## Benchmark
+
+`bench/` holds a fork of the [axi](https://github.com/kunchenguid/axi) `bench-github` harness pointed at Basecamp. It runs headless Claude Code with scoped tool permissions under two conditions, `cli` (raw `basecamp`) and `axi` (`basecamp-axi`), grades each trajectory with an LLM judge, and reports tokens, cost, turns, and success rate.
+
+```sh
+cd bench && npm install
+npm run bench -- run --condition axi --task project_count --repeat 3
+npm run bench -- matrix --repeat 3 --parallel     # full grid, both conditions at once
+npm run bench -- report                            # results/report.md and report.csv
+```
+
+Tasks and their ground-truth grading hints live in `bench/config/tasks.yaml`; they were captured against one account on 2026-09-11 and need refreshing if that data changes. Defaults: agent and judge `claude-sonnet-5`; override with `--model` and `BENCH_JUDGE_MODEL`. Set `BENCH_SKIP_PERMISSIONS=1` to use the upstream `--dangerously-skip-permissions` mode instead of the scoped allowlist.
+
+## Development
+
+```sh
+npm install
+npm run build          # tsc -> dist/
+npm test               # build + node --test
+npm run build:skill    # regenerate skills/basecamp-axi/SKILL.md from the CLI's own help
+npm run check:skill    # fail if the committed skill is stale
+node dist/bin/basecamp-axi.js <command>
+```
