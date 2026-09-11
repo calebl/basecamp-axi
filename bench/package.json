@@ -1,0 +1,19 @@
+{
+  "name": "basecamp-axi-bench",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Benchmark harness comparing the raw basecamp CLI with basecamp-axi for agent tasks (forked from kunchenguid/axi bench-github)",
+  "scripts": {
+    "bench": "node --no-warnings src/cli.ts"
+  },
+  "dependencies": {
+    "yaml": "^2.7.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0"
+  },
+  "engines": {
+    "node": ">=22.18"
+  }
+}

@@ -1,0 +1,43 @@
+# Benchmark conditions — each defines how the agent accesses Basecamp.
+# Both binaries are installed and authenticated against the same account;
+# the CLAUDE.md tells the agent which one it may use.
+
+conditions:
+  cli:
+    name: "basecamp CLI (raw)"
+    tool: basecamp
+    allowed_tools:
+      - "Bash(basecamp:*)"
+    agents_md: |
+      # Tools
+
+      You have the `basecamp` CLI installed and authenticated. Use it for all
+      Basecamp operations. Run `basecamp <command> --help` to discover
+      subcommands and flags. Pass `--json` for machine-readable output.
+      Most project-scoped commands take `--in <project id>`.
+
+      Examples:
+      - `basecamp projects list --json`
+      - `basecamp todos list --in 48189809 --json`
+      - `basecamp messages show 123 --json`
+
+      Do not use `basecamp-axi`.
+
+  axi:
+    name: "basecamp-axi (AXI wrapper)"
+    tool: basecamp-axi
+    allowed_tools:
+      - "Bash(basecamp-axi:*)"
+    agents_md: |
+      # Tools
+
+      You have `basecamp-axi` installed for Basecamp operations. The raw
+      `basecamp` CLI is not available — use `basecamp-axi` for all Basecamp
+      commands. Run `basecamp-axi` alone for a dashboard, or
+      `basecamp-axi <command> --help` for usage. Most project-scoped
+      commands take `--in <project id>` after the command.
+
+      Examples:
+      - `basecamp-axi project list`
+      - `basecamp-axi todo list --in 48189809`
+      - `basecamp-axi message view 123`

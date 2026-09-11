@@ -1,0 +1,91 @@
+# Benchmark tasks — all read-only against the Construct-Ease Basecamp account.
+#
+# Grading uses an LLM judge that reads the full trajectory. grading_hint holds
+# ground truth captured on 2026-09-11; refresh it if the account changes.
+
+tasks:
+  # ── Category A: Single-step retrieval ──────────────────────────
+
+  project_count:
+    category: single_step
+    prompt: >
+      How many projects are in this Basecamp account? Report the exact number.
+    grading:
+      grading_hint: "The account has 26 active projects. Reporting the size of a truncated first page (for example 10 or 15) is a failure."
+
+  project_tools:
+    category: single_step
+    prompt: >
+      Which Basecamp tools (to-dos, message board, chat, card table, docs, schedule, etc.)
+      are enabled on project 48618032? List only the enabled ones.
+    grading:
+      grading_hint: "Enabled: Message Board, To-dos, Chat (Campfire), and Card Table (kanban board). Docs & Files, Schedule, Check-ins, and Email Forwards are disabled."
+
+  people_on_project:
+    category: single_step
+    prompt: >
+      Who are the people on Basecamp project 48618032? Report their names.
+    grading:
+      grading_hint: "Exactly two people: Caleb LeNoir and DevAI Bot."
+
+  todolist_progress:
+    category: single_step
+    prompt: >
+      In Basecamp project 48189809, report the name of each to-do list and how many
+      of its to-dos are completed (as completed/total).
+    grading:
+      grading_hint: "One list: 'ConstructEase – Advanced Warehousing' with 0 of 12 completed (0/12)."
+
+  triage_card_count:
+    category: single_step
+    prompt: >
+      How many cards are currently in the "Triage" column of the card table in
+      Basecamp project 48618032? Report the exact number.
+    grading:
+      grading_hint: "The Triage column holds 11 cards. Off-by-one or a count of a different column is a failure."
+
+  # ── Category B: Multi-step chaining ────────────────────────────
+
+  message_last_commenter:
+    category: multi_step
+    prompt: >
+      In Basecamp project 48189809, find the message titled "Advanced Warehousing"
+      and report who wrote the most recent comment on it and what that comment said.
+    grading:
+      grading_hint: "The message has 8 comments. The most recent is by Jay Park and says all four items above have been deployed to production."
+
+  my_assignments:
+    category: multi_step
+    prompt: >
+      What open Basecamp to-dos and cards are assigned to me across all projects,
+      and how many of them are overdue? Report the count of open items, the count
+      that are overdue, and the title of any overdue item.
+    grading:
+      grading_hint: "8 open items are assigned to Caleb LeNoir (3 cards, 5 to-dos). Exactly 1 is overdue: the card 'Install Date Match Group' in the Bugs project, due 2026-08-28. Reporting only to-dos and missing the cards, or only one project, is a failure."
+
+  overdue_oldest:
+    category: multi_step
+    prompt: >
+      Across all Basecamp projects, how many to-dos are overdue, and which one has
+      the oldest due date? Report the count, the to-do title, and its due date.
+    grading:
+      grading_hint: "5 overdue to-dos. The oldest is 'Initial Concept Framework' in project KEP Multi Family, due 2025-12-22."
+
+  url_resolve:
+    category: multi_step
+    prompt: >
+      Given the Basecamp link
+      https://3.basecamp.com/6068025/buckets/48189809/messages/10126503472#__recording_10141576401
+      report what kind of item it points to, the project id, the recording id, and
+      the comment id, then report the title of the item.
+    grading:
+      grading_hint: "It is a message in project 48189809, recording id 10126503472, comment id 10141576401 (the URL fragment). The message title is 'Advanced Warehousing'."
+
+  # ── Category C: Error recovery ─────────────────────────────────
+
+  nonexistent_project:
+    category: error_recovery
+    prompt: >
+      List the to-dos in Basecamp project 999 and report their titles.
+    grading:
+      grading_hint: "Project 999 does not exist. The agent must report that the project was not found rather than inventing to-dos or listing another project's to-dos."
