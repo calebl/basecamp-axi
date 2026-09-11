@@ -164,6 +164,9 @@ function runAgent(
     cmd = [
       "claude", "--setting-sources", "''",
       "-p", JSON.stringify(task.prompt),
+      // --setting-sources '' also disables project CLAUDE.md loading, so the
+      // condition's tool instructions are injected into the system prompt.
+      "--append-system-prompt", JSON.stringify(condition.agents_md),
       "--model", spec.model,
       "--output-format", "stream-json",
       "--verbose",

@@ -1,6 +1,8 @@
 # Benchmark conditions — each defines how the agent accesses Basecamp.
-# Both binaries are installed and authenticated against the same account;
-# the CLAUDE.md tells the agent which one it may use.
+# Both binaries are installed and authenticated against the same account. The
+# agents_md text is appended to the system prompt and the allowed_tools list
+# is the Bash permission allowlist, so each condition can only run its own binary
+# plus read-only shell helpers.
 
 conditions:
   cli:
@@ -8,6 +10,19 @@ conditions:
     tool: basecamp
     allowed_tools:
       - "Bash(basecamp:*)"
+      - "Bash(which:*)"
+      - "Bash(ls:*)"
+      - "Bash(pwd:*)"
+      - "Bash(cat:*)"
+      - "Bash(head:*)"
+      - "Bash(tail:*)"
+      - "Bash(grep:*)"
+      - "Bash(jq:*)"
+      - "Bash(wc:*)"
+      - "Bash(sort:*)"
+      - "Bash(echo:*)"
+      - "Bash(sed:*)"
+      - "Bash(awk:*)"
     agents_md: |
       # Tools
 
@@ -28,6 +43,19 @@ conditions:
     tool: basecamp-axi
     allowed_tools:
       - "Bash(basecamp-axi:*)"
+      - "Bash(which:*)"
+      - "Bash(ls:*)"
+      - "Bash(pwd:*)"
+      - "Bash(cat:*)"
+      - "Bash(head:*)"
+      - "Bash(tail:*)"
+      - "Bash(grep:*)"
+      - "Bash(jq:*)"
+      - "Bash(wc:*)"
+      - "Bash(sort:*)"
+      - "Bash(echo:*)"
+      - "Bash(sed:*)"
+      - "Bash(awk:*)"
     agents_md: |
       # Tools
 
