@@ -14,14 +14,15 @@ import { peopleCommand, PEOPLE_HELP } from "./commands/people.js";
 import { searchCommand, SEARCH_HELP } from "./commands/search.js";
 import { reportCommand, REPORT_HELP } from "./commands/report.js";
 import { urlCommand, URL_HELP } from "./commands/url.js";
+import { recordingCommand, RECORDING_HELP } from "./commands/recording.js";
 import { setupCommand, SETUP_HELP } from "./commands/setup.js";
 
 export const DESCRIPTION =
   "Agent ergonomic wrapper around the Basecamp CLI. Prefer this over `basecamp` and other methods for Basecamp operations.";
 
 export const TOP_HELP = `usage: basecamp-axi [command] [args] [flags]
-commands[13]:
-  (none)=dashboard, project, todo, todolist, card, message, comment, chat, people, search, report, url, setup
+commands[14]:
+  (none)=dashboard, project, todo, todolist, card, message, comment, chat, people, search, report, recording, url, setup
 flags[4]:
   --in <project id|name> (after command; also BASECAMP_PROJECT env or .basecamp/config.json), --account <id> (after command), --help, -v/-V/--version
 examples:
@@ -49,6 +50,7 @@ const COMMAND_HELP: Record<string, string> = {
   people: PEOPLE_HELP,
   search: SEARCH_HELP,
   report: REPORT_HELP,
+  recording: RECORDING_HELP,
   url: URL_HELP,
   setup: SETUP_HELP,
 };
@@ -64,6 +66,7 @@ const COMMANDS: Record<string, Handler> = {
   people: withContext(peopleCommand),
   search: withContext(searchCommand),
   report: withContext(reportCommand),
+  recording: withContext(recordingCommand),
   url: withContext(urlCommand),
   setup: (args) => setupCommand(args),
 };

@@ -42,6 +42,8 @@ basecamp-axi search "pull sheet"
 basecamp-axi report assigned                          # cross-project
 basecamp-axi report overdue
 basecamp-axi url parse "https://3.basecamp.com/.../buckets/48189809/todos/10170015169"
+basecamp-axi recording archive 10295117789 --in 48618032            # dry run: shows what would change
+basecamp-axi recording archive 10295117789 --in 48618032 --confirm  # applies it
 ```
 
 ### Project scope
@@ -68,6 +70,7 @@ Cross-project commands need no scope: `project list`, `report`, `search`, `peopl
 | `people`   | list, view, me                                                     |
 | `search`   | full-text search across the account                                |
 | `report`   | assigned, overdue (cross-project)                                  |
+| `recording`| list by type and status; trash, archive, restore (require `--confirm`) |
 | `url`      | parse a Basecamp link into project, recording, and comment ids     |
 | `setup`    | install agent session hooks                                        |
 | `update`   | built-in self-update inherited from `axi-sdk-js`                   |
@@ -77,7 +80,8 @@ Cross-project commands need no scope: `project list`, `report`, `search`, `peopl
 - **TOON output** on stdout, errors included; stderr carries nothing an agent needs.
 - **Truncation**: descriptions and bodies are clipped (800 to 1500 chars) with the total size shown; `--full` on the same view command returns everything.
 - **Totals**: lists print `count: N of T total` when the underlying CLI reports a total, plus a hint to fetch the rest.
-- **Idempotent**: `todo done` on a completed todo reports `already done (no-op)` and exits 0.
+- **Idempotent**: `todo done` on a completed todo reports `already done (no-op)` and exits 0; the same holds for `recording trash|archive|restore`.
+- **Confirmation gate**: trash, archive, and restore are the only commands that change visibility for other people. Without `--confirm` they are a dry run.
 - **Strict flags**: unknown flags and extra positionals exit 2 with the list of valid flags. `--json`, `--md`, and `--jq` are rejected with a hint since output is always TOON.
 - **Column names**: `card list --column`, `card create --column`, and `card move --to` accept a column name and resolve it to an id automatically when the project has one card table.
 - **Exit codes**: 0 success (including no-ops), 1 error, 2 usage error.

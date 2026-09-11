@@ -1,6 +1,6 @@
 ---
 name: basecamp-axi
-description: "Operate Basecamp through the basecamp-axi CLI - projects, todos, todolists, cards (kanban), messages, comments, campfire chat, people, search, cross-project reports, and URL parsing. Use whenever a task touches Basecamp: checking what is assigned to you, listing or creating todos, completing or reassigning work, reading or replying to messages and comments, moving cards, posting to chat, or resolving a Basecamp link."
+description: "Operate Basecamp through the basecamp-axi CLI - projects, todos, todolists, cards (kanban), messages, comments, campfire chat, people, search, cross-project reports, archiving or trashing recordings, and URL parsing. Use whenever a task touches Basecamp: checking what is assigned to you, listing or creating todos, completing or reassigning work, reading or replying to messages and comments, moving cards, posting to chat, or resolving a Basecamp link."
 user-invocable: false
 ---
 
@@ -31,8 +31,8 @@ Use basecamp-axi whenever a task touches Basecamp: seeing what is assigned to yo
 ## Commands
 
 ```
-commands[13]:
-  (none)=dashboard, project, todo, todolist, card, message, comment, chat, people, search, report, url, setup
+commands[14]:
+  (none)=dashboard, project, todo, todolist, card, message, comment, chat, people, search, report, recording, url, setup
 ```
 
 Installed copies also inherit the SDK built-in `update` command (`basecamp-axi update --check`).
@@ -47,5 +47,6 @@ Run `npx -y basecamp-axi --help` for global flags, or `npx -y basecamp-axi <comm
 - For multi-line text, write it to a UTF-8 file and pass `--body-file <path>` (messages, comments) or `--description-file <path>` (todos).
 - Cards: column names are resolved to ids automatically (`card move <id> --to Done`); pass `--card-table <id>` only when a project has several tables.
 - A `TOOL_DISABLED` error means the project has that Basecamp tool turned off; `project view <id>` lists the enabled tools. A `DEPENDENCY_OUTDATED` error means the installed `basecamp` CLI lacks a flag; ask the user to run `basecamp upgrade`.
+- `recording trash|archive|restore <id> --in <project>` are the only status-changing commands. Without `--confirm` they print what would change and exit 0 without touching anything; rerun with `--confirm` to apply. Trash is reversible with `recording restore`.
 - Unknown flags are rejected with the list of valid flags - fix the flag rather than retrying blindly.
 - Exit codes: 0 success (including no-ops), 1 error, 2 usage error.
