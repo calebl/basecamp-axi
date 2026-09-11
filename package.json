@@ -11,7 +11,7 @@
     "toon"
   ],
   "bin": {
-    "basecamp-axi": "./dist/bin/basecamp-axi.js"
+    "basecamp-axi": "dist/bin/basecamp-axi.js"
   },
   "files": [
     "dist/**/*.js",
