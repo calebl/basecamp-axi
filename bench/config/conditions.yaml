@@ -23,6 +23,7 @@ conditions:
       - "Bash(echo:*)"
       - "Bash(sed:*)"
       - "Bash(awk:*)"
+      - "Bash(python3:*)"
     agents_md: |
       # Tools
 
@@ -56,6 +57,7 @@ conditions:
       - "Bash(echo:*)"
       - "Bash(sed:*)"
       - "Bash(awk:*)"
+      - "Bash(python3:*)"
     agents_md: |
       # Tools
 
