@@ -8,14 +8,14 @@ Wraps the official [`basecamp`](https://github.com/basecamp/basecamp-cli) CLI wi
 
 Agent ergonomics is measurable. The harness in [`bench/`](bench/) runs the same Basecamp tasks through two conditions: an agent using basecamp-axi and one using the raw `basecamp` CLI.
 
-**Read tasks.** Ten read-only tasks (assignments across projects, overdue work, message comment threads, card counts, URL resolution, a not-found case, and more), 3 repeats each, with `claude-sonnet-5` as the agent and an LLM judge scoring task success.
+**Read tasks.** Ten read-only tasks (assignments across projects, overdue work, message comment threads, card counts, URL resolution, a not-found case, and more), with `claude-sonnet-5-5` as the agent (the same model as the write tasks), 1 repeat, and an LLM judge scoring task success.
 
-| Condition        | Success  | Avg Input Tokens | Avg Cost/Task | Avg Duration | Avg Turns |
-| ---------------- | -------- | ---------------- | ------------- | ------------ | --------- |
-| **basecamp-axi** | **100%** | **105,981**      | **$0.040**    | **8.1s**     | **3**     |
-| basecamp CLI     | 100%     | 162,194          | $0.070        | 14.1s        | 5         |
+| Condition        | Success   | Avg Input Tokens | Avg Cost/Task | Avg Duration | Avg Turns |
+| ---------------- | --------- | ---------------- | ------------- | ------------ | --------- |
+| **basecamp-axi** | **10/10** | **67,397**       | **$0.030**    | **6.1s**     | **3**     |
+| basecamp CLI     | 9/10      | 86,139           | $0.041        | 7.5s         | 4         |
 
-Same success rate with 35% fewer input tokens, 43% lower cost, and 43% less wall-clock time. The gap is widest on cross-project work: "what is assigned to me and what is overdue" took the raw CLI agent 12 turns walking projects, against 4 for basecamp-axi's single report. Full write-up and per-task numbers: [`bench/published-results/STUDY.md`](bench/published-results/STUDY.md).
+basecamp-axi used 22% fewer input tokens, cost 27% less, and finished 19% faster. The gap is widest on cross-project work: "which to-dos are overdue and which is oldest" took the raw CLI agent 9 turns, against 3 for basecamp-axi's single report, and the raw CLI agent failed "what is assigned to me" after a truncated listing. Full write-up and per-task numbers: [`bench/published-results/STUDY.md`](bench/published-results/STUDY.md). The earlier `claude-sonnet-5` run (2026-09-11, 3 repeats: axi $0.040 vs CLI $0.070 per task, both 100%) is kept under [`bench/published-results/history/`](bench/published-results/history/2026-09-11-claude-sonnet-5/STUDY.md).
 
 **Write tasks.** Eleven everyday writes in a throwaway sandbox project: create a to-do with an assignee and due date, create one with subtasks, complete one, comment on one, create and move cards, post and reply to messages, post in chat, upload a file, and repeat a task in a fresh session. The agent is `claude-sonnet-5-5`, with 1 repeat. Success is checked by reading Basecamp back after each run; a duplicate counts as a failure.
 
@@ -133,7 +133,7 @@ npm run bench -- matrix --repeat 3 --parallel     # full grid, both conditions a
 npm run bench -- report                            # results/report.md and report.csv
 ```
 
-Tasks and their ground-truth grading hints live in `bench/config/tasks.yaml`; they were captured against one account on 2026-09-11 and need refreshing if that data changes. Defaults: agent and judge `claude-sonnet-5`; override with `--model` and `BENCH_JUDGE_MODEL`. Set `BENCH_SKIP_PERMISSIONS=1` to use the upstream `--dangerously-skip-permissions` mode instead of the scoped allowlist. The axi condition runs this checkout's `dist/` build when it exists, so run `npm run build` first.
+Tasks and their ground-truth grading hints live in `bench/config/tasks.yaml`; they were last refreshed against one account on 2026-10-23 and need refreshing if that data changes. Defaults: agent and judge `claude-sonnet-5` for the read suite (the published read results use `--model claude-sonnet-5-5` with `BENCH_JUDGE_MODEL=claude-sonnet-5-5`); override with `--model` and `BENCH_JUDGE_MODEL`. Set `BENCH_SKIP_PERMISSIONS=1` to use the upstream `--dangerously-skip-permissions` mode instead of the scoped allowlist. The axi condition runs this checkout's `dist/` build when it exists, so run `npm run build` first.
 
 The write suite (`suite: write` tasks) changes Basecamp, so it runs only inside one sandbox project, configured in `bench/config/sandbox.yaml`. The config sets the CLI profile, the account, the exact project name, the agent model, and a spend cap. The harness creates the project when it is missing. It empties the project and seeds it before every task, and empties it again at the end. Each task is graded by a named check in `bench/src/write-grader.ts` that reads the project back. Before starting, a write matrix prints its cost estimate. It refuses to start over budget and stops once actual spend reaches the cap. After the agent tasks, it runs model-free safety probes (trash without confirmation, completing a to-do twice).
 
