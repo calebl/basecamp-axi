@@ -2,12 +2,19 @@
  * Aggregate results.jsonl into summary tables (markdown + CSV).
  */
 
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import type { RunResult, ConditionId, ConditionSummary } from "./types.ts";
+import type { RunResult, ConditionId, ConditionSummary, ProbeResult, Suite } from "./types.ts";
 
 const BENCH_ROOT = resolve(import.meta.dirname, "..");
 const RESULTS_DIR = join(BENCH_ROOT, "results");
+
+/** Read results stay at results/ (as published); write results live in results/write/. */
+export function resultsDir(suite: Suite = "read"): string {
+  const dir = suite === "write" ? join(RESULTS_DIR, "write") : RESULTS_DIR;
+  mkdirSync(dir, { recursive: true });
+  return dir;
+}
 
 function mean(arr: number[]): number {
   if (arr.length === 0) return 0;
@@ -18,8 +25,8 @@ function sum(arr: number[]): number {
   return arr.reduce((a, b) => a + b, 0);
 }
 
-function loadResults(): RunResult[] {
-  const path = join(RESULTS_DIR, "results.jsonl");
+function loadResults(dir = RESULTS_DIR): RunResult[] {
+  const path = join(dir, "results.jsonl");
   let raw: string;
   try {
     raw = readFileSync(path, "utf-8");
@@ -154,11 +161,33 @@ export function csvReport(results?: RunResult[]): string {
   return lines.join("\n") + "\n";
 }
 
-export function writeReports(): void {
-  const md = markdownReport();
-  const csv = csvReport();
-  writeFileSync(join(RESULTS_DIR, "report.md"), md);
-  writeFileSync(join(RESULTS_DIR, "report.csv"), csv);
+/** Tool-level safety probes: one row per probe, one column per condition. */
+export function probesReport(probes: ProbeResult[]): string {
+  if (probes.length === 0) return "";
+  const conditions = [...new Set(probes.map((p) => p.condition))];
+  const lines = ["## Safety Probes\n"];
+  lines.push(`| Probe | ${conditions.join(" | ")} |`);
+  lines.push(`|-------|${conditions.map(() => "------").join("|")}|`);
+  for (const [probe, rows] of groupBy(probes, (p) => p.probe)) {
+    const cells = conditions.map((c) => {
+      const row = rows.find((r) => r.condition === c);
+      return row ? `${row.passed ? "PASS" : "FAIL"}: ${row.details}` : "-";
+    });
+    lines.push(`| ${probe} | ${cells.join(" | ")} |`);
+  }
+  return lines.join("\n") + "\n";
+}
+
+export function writeReports(suite: Suite = "read"): void {
+  const dir = resultsDir(suite);
+  const results = loadResults(dir);
+  const probesPath = join(dir, "probes.json");
+  const probes = existsSync(probesPath) ? (JSON.parse(readFileSync(probesPath, "utf-8")) as ProbeResult[]) : [];
+  const md = markdownReport(results) + (probes.length ? "\n" + probesReport(probes) : "");
+  const csv = csvReport(results);
+  writeFileSync(join(dir, "report.md"), md);
+  writeFileSync(join(dir, "report.csv"), csv);
   console.log(md);
-  console.log(`Reports written to results/report.md and results/report.csv`);
+  const rel = suite === "write" ? "results/write" : "results";
+  console.log(`Reports written to ${rel}/report.md and ${rel}/report.csv`);
 }

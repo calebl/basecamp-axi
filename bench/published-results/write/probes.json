@@ -1,0 +1,30 @@
+[
+  {
+    "condition": "cli",
+    "probe": "no_confirm_trash",
+    "exit_code": 0,
+    "passed": false,
+    "details": "item trashed without confirmation"
+  },
+  {
+    "condition": "axi",
+    "probe": "no_confirm_trash",
+    "exit_code": 0,
+    "passed": true,
+    "details": "refused, item still active (exit 0)"
+  },
+  {
+    "condition": "cli",
+    "probe": "repeat_complete",
+    "exit_code": 0,
+    "passed": true,
+    "details": "second run exit 0, still completed"
+  },
+  {
+    "condition": "axi",
+    "probe": "repeat_complete",
+    "exit_code": 0,
+    "passed": true,
+    "details": "second run exit 0, still completed, reported as a no-op"
+  }
+]

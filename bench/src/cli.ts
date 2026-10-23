@@ -4,17 +4,19 @@
  *
  * Commands:
  *   run       — Run a single benchmark (--condition, --task, --repeat, --model, --agent)
- *   matrix    — Run all condition × task combinations
- *   report    — Generate summary from results.jsonl
+ *   matrix    — Run all condition × task combinations (--suite read|write)
+ *   report    — Generate summary from results.jsonl (--suite read|write)
+ *   sandbox   — Show or empty the write suite's sandbox project
  */
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
-import { execSync } from "node:child_process";
+import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { resolve, join } from "node:path";
 import { parse as parseYaml } from "yaml";
-import type { AgentBackend, ConditionDef, ConditionId, TaskDef } from "./types.ts";
+import type { AgentBackend, ConditionDef, ConditionId, ProbeResult, SandboxDef, Suite, TaskDef } from "./types.ts";
 import { runOne } from "./runner.ts";
-import { writeReports } from "./reporter.ts";
+import { resultsDir, writeReports } from "./reporter.ts";
+import { type Sandbox, openSandbox, resetSandbox } from "./sandbox.ts";
+import { runProbes } from "./probes.ts";
 
 const BENCH_ROOT = resolve(import.meta.dirname, "..");
 const CONFIG_DIR = join(BENCH_ROOT, "config");
@@ -29,22 +31,26 @@ function loadConditions(): Map<string, ConditionDef> {
   return map;
 }
 
-function loadTasks(): Map<string, TaskDef> {
+/** All tasks, or only one suite's. Tasks without a suite are read tasks. */
+function loadTasks(suite?: Suite): Map<string, TaskDef> {
   const raw = readFileSync(join(CONFIG_DIR, "tasks.yaml"), "utf-8");
-  const doc = parseYaml(raw) as { tasks: Record<string, Omit<TaskDef, "id">> };
+  const doc = parseYaml(raw) as { tasks: Record<string, Omit<TaskDef, "id" | "suite"> & { suite?: Suite }> };
   const map = new Map<string, TaskDef>();
   for (const [id, def] of Object.entries(doc.tasks)) {
-    map.set(id, { ...def, id });
+    const task: TaskDef = { ...def, id, suite: def.suite ?? "read" };
+    if (!suite || task.suite === suite) map.set(id, task);
   }
   return map;
 }
 
+function loadSandboxDef(): SandboxDef {
+  return parseYaml(readFileSync(join(CONFIG_DIR, "sandbox.yaml"), "utf-8")) as SandboxDef;
+}
+
 /** Clear previous results for the given conditions, keeping results from other conditions. */
-function clearResults(conditionIds: string[]): void {
-  const resultsDir = join(BENCH_ROOT, "results");
-  const resultsPath = join(resultsDir, "results.jsonl");
+function clearResults(conditionIds: string[], suite: Suite = "read"): void {
+  const resultsPath = join(resultsDir(suite), "results.jsonl");
   if (!existsSync(resultsPath)) {
-    mkdirSync(resultsDir, { recursive: true });
     writeFileSync(resultsPath, "");
     return;
   }
@@ -76,6 +82,28 @@ function parseArgs(argv: string[]): Record<string, string> {
   return args;
 }
 
+/** Agent sessions a set of tasks costs: each task × repeat × its sessions, per condition. */
+function sessionCount(tasks: TaskDef[], conditions: number, repeat: number): number {
+  return tasks.reduce((n, t) => n + (t.sessions ?? 1), 0) * conditions * repeat;
+}
+
+/** Print the cost estimate and refuse to start when it is over budget. */
+function checkBudget(sessions: number, def: SandboxDef, budget: number): void {
+  const estimate = sessions * def.estimate_per_session_usd;
+  console.log(`Estimate: ${sessions} agent sessions × $${def.estimate_per_session_usd.toFixed(2)} ≈ $${estimate.toFixed(2)} (budget $${budget.toFixed(2)})`);
+  if (estimate > budget) {
+    console.error(`Estimate exceeds the budget. Narrow --task/--condition, lower --repeat, or pass --budget.`);
+    process.exit(1);
+  }
+}
+
+/** Empty the sandbox even when a run throws, so no benchmark content is left behind. */
+function finishSandbox(sandbox: Sandbox | undefined): void {
+  if (!sandbox) return;
+  const removed = resetSandbox(sandbox);
+  console.log(`Sandbox project ${sandbox.projectId} emptied (${removed} items removed).`);
+}
+
 async function cmdRun(argv: string[]): Promise<void> {
   const args = parseArgs(argv);
   const conditionId = args.condition;
@@ -83,7 +111,7 @@ async function cmdRun(argv: string[]): Promise<void> {
   const repeat = parseInt(args.repeat ?? "1", 10);
   const agent = (args.agent ?? "claude") as AgentBackend;
   const defaultModel = agent === "claude" ? "claude-sonnet-5" : "gpt-5.4";
-  const model = args.model ?? defaultModel;
+  let model = args.model ?? defaultModel;
 
   if (!conditionId || !taskId) {
     console.error("Usage: bench run --condition <id> --task <id> [--repeat N] [--model M] [--agent codex|claude]");
@@ -105,16 +133,28 @@ async function cmdRun(argv: string[]): Promise<void> {
     process.exit(1);
   }
 
-  clearResults([conditionId]);
+  let sandbox: Sandbox | undefined;
+  if (task.suite === "write") {
+    const def = loadSandboxDef();
+    if (!args.model && agent === "claude") model = def.model;
+    checkBudget(sessionCount([task], 1, repeat), def, parseFloat(args.budget ?? String(def.budget_usd)));
+    sandbox = openSandbox(def, { create: true });
+  }
 
-  for (let r = 1; r <= repeat; r++) {
-    console.log(`\n=== Run ${r}/${repeat}: ${conditionId} × ${taskId} ===\n`);
-    const result = runOne({ condition: conditionId as ConditionId, task: taskId, run: r, model, agent }, condition, task);
-    console.log(`  Success: ${result.grade.task_success}`);
-    console.log(`  Turns: ${result.usage.turn_count}, Commands: ${result.usage.command_count}`);
-    console.log(`  Input tokens: ${result.usage.input_tokens} (cached: ${result.usage.input_tokens_cached})`);
-    console.log(`  Cost: $${result.usage.total_cost_usd.toFixed(4)}`);
-    console.log(`  Time: ${result.usage.wall_clock_seconds.toFixed(1)}s`);
+  clearResults([conditionId], task.suite);
+
+  try {
+    for (let r = 1; r <= repeat; r++) {
+      console.log(`\n=== Run ${r}/${repeat}: ${conditionId} × ${taskId} ===\n`);
+      const result = runOne({ condition: conditionId as ConditionId, task: taskId, run: r, model, agent }, condition, task, sandbox);
+      console.log(`  Success: ${result.grade.task_success}${task.suite === "write" ? ` (${result.grade.details})` : ""}`);
+      console.log(`  Turns: ${result.usage.turn_count}, Commands: ${result.usage.command_count}`);
+      console.log(`  Input tokens: ${result.usage.input_tokens} (cached: ${result.usage.input_tokens_cached})`);
+      console.log(`  Cost: $${result.usage.total_cost_usd.toFixed(4)}`);
+      console.log(`  Time: ${result.usage.wall_clock_seconds.toFixed(1)}s`);
+    }
+  } finally {
+    finishSandbox(sandbox);
   }
 }
 
@@ -123,13 +163,14 @@ async function cmdMatrix(argv: string[]): Promise<void> {
   const repeat = parseInt(args.repeat ?? "1", 10);
   const agent = (args.agent ?? "claude") as AgentBackend;
   const defaultModel = agent === "claude" ? "claude-sonnet-5" : "gpt-5.4";
-  const model = args.model ?? defaultModel;
+  let model = args.model ?? defaultModel;
   const conditionFilter = args.condition;
   const taskFilter = args.task;
   const categoryFilter = args.category;
+  const suite = (args.suite ?? "read") as Suite;
 
   const conditions = loadConditions();
-  const tasks = loadTasks();
+  const tasks = loadTasks(suite);
 
   const conditionIds = conditionFilter
     ? conditionFilter.split(",")
@@ -146,10 +187,68 @@ async function cmdMatrix(argv: string[]): Promise<void> {
     });
   }
 
-  clearResults(conditionIds);
-
   const parallel = args.parallel === "true";
   const total = conditionIds.length * taskIds.length * repeat;
+
+  if (suite === "write") {
+    // All conditions share one sandbox project, so write runs are strictly sequential.
+    if (parallel) {
+      console.error("--parallel is not supported with --suite write: every run resets the same sandbox project.");
+      process.exit(1);
+    }
+    const def = loadSandboxDef();
+    if (!args.model && agent === "claude") model = def.model;
+    console.log(`Agent model: ${model}`);
+    const budget = parseFloat(args.budget ?? String(def.budget_usd));
+    const selected = taskIds.map((id) => tasks.get(id)).filter((t): t is TaskDef => Boolean(t));
+    checkBudget(sessionCount(selected, conditionIds.length, repeat), def, budget);
+    const sandbox = openSandbox(def, { create: true });
+    console.log(`Sandbox: "${def.project_name}" = project ${sandbox.projectId} in account ${def.account_id}`);
+    clearResults(conditionIds, suite);
+
+    let spent = 0;
+    let stopped = false;
+    try {
+      // Interleave conditions per task so a budget stop leaves comparable pairs.
+      outer: for (const taskId of taskIds) {
+        const task = tasks.get(taskId);
+        if (!task) {
+          console.error(`Skipping unknown task: ${taskId}`);
+          continue;
+        }
+        for (let r = 1; r <= repeat; r++) {
+          for (const condId of conditionIds) {
+            const condition = conditions.get(condId);
+            if (!condition) continue;
+            if (spent >= budget) {
+              console.error(`\nBudget reached: $${spent.toFixed(2)} spent of $${budget.toFixed(2)}. Stopping.`);
+              stopped = true;
+              break outer;
+            }
+            console.log(`\n[${condId}] ${taskId} (run ${r})`);
+            const result = runOne({ condition: condId as ConditionId, task: taskId, run: r, model, agent }, condition, task, sandbox);
+            spent += result.usage.total_cost_usd;
+            const status = result.grade.task_success ? "PASS" : "FAIL";
+            console.log(`  ${status} | ${result.usage.turn_count} turns | $${result.usage.total_cost_usd.toFixed(4)} | ${result.usage.wall_clock_seconds.toFixed(1)}s | ${result.grade.details}`);
+          }
+        }
+      }
+
+      if (!stopped && args["skip-probes"] !== "true") {
+        console.log(`\nSafety probes:`);
+        const probes: ProbeResult[] = runProbes(sandbox, def.probes, conditionIds);
+        writeFileSync(join(resultsDir(suite), "probes.json"), JSON.stringify(probes, null, 2));
+      }
+    } finally {
+      finishSandbox(sandbox);
+    }
+
+    console.log(`\nWrite matrix ${stopped ? "stopped at budget" : "complete"}: $${spent.toFixed(2)} spent.`);
+    writeReports(suite);
+    return;
+  }
+
+  clearResults(conditionIds);
 
   const runCondition = (condId: string) => {
     const condition = conditions.get(condId);
@@ -220,6 +319,14 @@ async function cmdMatrix(argv: string[]): Promise<void> {
   writeReports();
 }
 
+async function cmdSandbox(argv: string[]): Promise<void> {
+  const [action] = argv;
+  const def = loadSandboxDef();
+  const sandbox = openSandbox(def, { create: false });
+  console.log(`"${def.project_name}" = project ${sandbox.projectId} in account ${def.account_id} (profile ${process.env.BENCH_BASECAMP_PROFILE ?? def.profile})`);
+  if (action === "reset") finishSandbox(sandbox);
+}
+
 async function main(): Promise<void> {
   const [command, ...rest] = process.argv.slice(2);
 
@@ -229,8 +336,10 @@ async function main(): Promise<void> {
     case "matrix":
       return cmdMatrix(rest);
     case "report":
-      writeReports();
+      writeReports((parseArgs(rest).suite ?? "read") as Suite);
       return;
+    case "sandbox":
+      return cmdSandbox(rest);
     default:
       console.log(`basecamp-axi bench — benchmark harness for basecamp CLI vs basecamp-axi
 
@@ -239,19 +348,27 @@ Commands:
               --condition <cli|axi>
               --task <task_id>
               --repeat <N>  (default: 1)
-              --model <M>   (default: claude-sonnet-5)
+              --model <M>   (default: claude-sonnet-5; write tasks: model in config/sandbox.yaml)
               --agent <claude|codex>  (default: claude)
+              --budget <usd>  (write tasks; default from config/sandbox.yaml)
 
   matrix    Run all condition × task combinations
+              --suite <read|write>  (default: read)
               --repeat <N>  (default: 1)
-              --model <M>   (default: claude-sonnet-5)
+              --model <M>   (default: claude-sonnet-5; write suite: model in config/sandbox.yaml)
               --agent <claude|codex>  (default: claude)
               --condition <id,id,...>  (filter conditions)
               --task <id,id,...>       (filter tasks)
-              --category <single_step|multi_step|error_recovery>
-              --parallel          Run conditions in parallel
+              --category <single_step|multi_step|error_recovery|write|write_safety>
+              --parallel          Run conditions in parallel (read suite only)
+              --budget <usd>      Write suite spend cap (default from config/sandbox.yaml)
+              --skip-probes       Write suite: skip the tool-level safety probes
 
   report    Generate summary from results.jsonl
+              --suite <read|write>  (default: read)
+
+  sandbox   Show the write suite's sandbox project (never creates it)
+  sandbox reset   Empty the sandbox project
 `);
   }
 }
