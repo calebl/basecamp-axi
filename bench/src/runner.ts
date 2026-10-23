@@ -2,63 +2,123 @@
  * Benchmark runner — executes agent tasks and grades results.
  *
  * Per RunSpec:
- * 1. Create artifact dir: results/{condition}/{task}/{runN}/
- * 2. Write condition-specific AGENTS.md to workspace seed
- * 3. Run agent (codex or claude) in the workspace
+ * 1. Create artifact dir: results/[write/]{condition}/{task}/{runN}/
+ * 2. Write condition-specific AGENTS.md (and any task files) to the workspace;
+ *    write tasks also empty and seed the sandbox project
+ * 3. Run agent (codex or claude) in the workspace, once per session
  * 4. Parse JSONL output → usage metrics
- * 5. Run grader → grade.json
+ * 5. Grade → grade.json (LLM judge for read tasks, Basecamp read-back for write tasks)
  * 6. Append to results.jsonl
  */
 
 import { execFileSync, execSync, type ExecFileSyncOptionsWithStringEncoding } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync, appendFileSync, rmSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, appendFileSync, rmSync, chmodSync } from "node:fs";
+import { delimiter, join, resolve } from "node:path";
 
-import type { RunSpec, RunResult, ConditionDef, TaskDef, AgentBackend } from "./types.ts";
+import type { RunSpec, RunResult, ConditionDef, TaskDef, AgentBackend, UsageMetrics } from "./types.ts";
 import { parseCodexJsonl, parseClaudeJsonl } from "./usage.ts";
 import { grade } from "./grader.ts";
+import { gradeWrite } from "./write-grader.ts";
+import { resultsDir } from "./reporter.ts";
+import { type Sandbox, resetSandbox, seedSandbox, sandboxEnv, sandboxReader } from "./sandbox.ts";
 
 
 const BENCH_ROOT = resolve(import.meta.dirname, "..");
-const RESULTS_DIR = join(BENCH_ROOT, "results");
+const REPO_ROOT = resolve(BENCH_ROOT, "..");
+
+/**
+ * Put this checkout's basecamp-axi build first on PATH so the axi condition
+ * measures the code under test rather than whatever is installed globally.
+ * Falls back to PATH as-is when the repo has not been built.
+ */
+export function agentPath(): string {
+  const built = join(REPO_ROOT, "dist", "bin", "basecamp-axi.js");
+  if (!existsSync(built)) return process.env.PATH ?? "";
+  const shimDir = join(BENCH_ROOT, "results", ".bin");
+  mkdirSync(shimDir, { recursive: true });
+  const shim = join(shimDir, "basecamp-axi");
+  writeFileSync(shim, `#!/bin/sh\nexec node "${built}" "$@"\n`);
+  chmodSync(shim, 0o755);
+  return [shimDir, process.env.PATH ?? ""].join(delimiter);
+}
+
+/** Sum usage across the sessions of one trial. */
+export function mergeUsage(parts: UsageMetrics[]): UsageMetrics {
+  const total = (key: keyof UsageMetrics): number => parts.reduce((acc, u) => acc + (u[key] as number), 0);
+  return {
+    input_tokens: total("input_tokens"),
+    input_tokens_cached: total("input_tokens_cached"),
+    input_tokens_uncached: total("input_tokens_uncached"),
+    output_tokens: total("output_tokens"),
+    reasoning_tokens: total("reasoning_tokens"),
+    total_cost_usd: total("total_cost_usd"),
+    wall_clock_seconds: total("wall_clock_seconds"),
+    turn_count: total("turn_count"),
+    command_count: total("command_count"),
+    error_count: total("error_count"),
+    command_log: parts.flatMap((u) => u.command_log),
+  };
+}
 
 export function runOne(
   spec: RunSpec,
   condition: ConditionDef,
   task: TaskDef,
+  sandbox?: Sandbox,
 ): RunResult {
+  if (task.suite === "write" && !sandbox) throw new Error(`Write task ${task.id} needs a sandbox project.`);
+
   // 1. Create artifact dir
-  const artifactDir = join(RESULTS_DIR, spec.condition, spec.task, `run${spec.run}`);
+  const artifactDir = join(resultsDir(task.suite), spec.condition, spec.task, `run${spec.run}`);
   mkdirSync(artifactDir, { recursive: true });
 
-  // 2. Set up an empty workspace holding only the condition's CLAUDE.md.
+  // 2. Set up an empty workspace holding only the condition's CLAUDE.md and the task's files.
   const workspaceDir = join(artifactDir, "workspace");
 
   try {
     mkdirSync(workspaceDir, { recursive: true });
     writeFileSync(join(workspaceDir, "CLAUDE.md"), condition.agents_md);
     writeFileSync(join(workspaceDir, "AGENTS.md"), condition.agents_md);
+    for (const [name, contents] of Object.entries(task.files ?? {})) {
+      writeFileSync(join(workspaceDir, name), contents);
+    }
+
+    let prompt = task.prompt;
+    let env: NodeJS.ProcessEnv = { ...process.env, PATH: agentPath() };
+    if (sandbox) {
+      resetSandbox(sandbox);
+      seedSandbox(sandbox, task.seed);
+      prompt = prompt.replaceAll("{project}", sandbox.projectId);
+      env = { ...sandboxEnv(sandbox.def), PATH: env.PATH };
+    }
 
     const agent = spec.agent ?? "codex";
 
-    // 3. Run agent
-    const { agentOutput, wallClockSeconds } = runAgent(spec, condition, task, artifactDir, workspaceDir);
-
-    // Save raw output
-    writeFileSync(join(artifactDir, "agent_output.txt"), agentOutput);
-
-    // 4. Parse usage
-    const usage = agent === "claude"
-      ? parseClaudeJsonl(agentOutput, { model: spec.model, wallClockSeconds })
-      : parseCodexJsonl(agentOutput, { model: spec.model, wallClockSeconds });
+    // 3. Run agent, once per session (a second session re-runs the same prompt to test idempotency)
+    const outputs: string[] = [];
+    const usages: UsageMetrics[] = [];
+    const sessions = task.sessions ?? 1;
+    for (let s = 1; s <= sessions; s++) {
+      const { agentOutput, wallClockSeconds } = runAgent(spec, condition, prompt, env, artifactDir, workspaceDir);
+      writeFileSync(join(artifactDir, sessions > 1 ? `agent_output.${s}.txt` : "agent_output.txt"), agentOutput);
+      outputs.push(agentOutput);
+      // 4. Parse usage
+      usages.push(agent === "claude"
+        ? parseClaudeJsonl(agentOutput, { model: spec.model, wallClockSeconds })
+        : parseCodexJsonl(agentOutput, { model: spec.model, wallClockSeconds }));
+    }
+    const agentOutput = outputs[outputs.length - 1];
+    const usage = mergeUsage(usages);
 
     // Extract final text output for the result record
     const finalOutput = agent === "claude"
       ? extractClaudeFinalOutput(agentOutput)
       : extractFinalOutput(agentOutput);
 
-    // 5. Grade — pass raw JSONL so the judge sees the full trajectory
-    const gradeResult = grade(task.grading, task.prompt, agentOutput, agent, artifactDir);
+    // 5. Grade — write tasks read the sandbox back; read tasks pass raw JSONL so the judge sees the full trajectory
+    const gradeResult = sandbox
+      ? gradeWrite(task.grading, sandboxReader(sandbox))
+      : grade(task.grading, task.prompt, agentOutput, agent, artifactDir);
     writeFileSync(join(artifactDir, "grade.json"), JSON.stringify(gradeResult, null, 2));
 
     // 6. Build result
@@ -74,7 +134,7 @@ export function runOne(
     };
 
     // 7. Append to results.jsonl
-    const resultsJsonl = join(RESULTS_DIR, "results.jsonl");
+    const resultsJsonl = join(resultsDir(task.suite), "results.jsonl");
     appendFileSync(resultsJsonl, JSON.stringify(result) + "\n");
 
     return result;
@@ -146,7 +206,8 @@ function extractClaudeFinalOutput(jsonl: string): string {
 function runAgent(
   spec: RunSpec,
   condition: ConditionDef,
-  task: TaskDef,
+  prompt: string,
+  env: NodeJS.ProcessEnv,
   artifactDir: string,
   workspaceDir: string,
 ): { agentOutput: string; wallClockSeconds: number } {
@@ -165,7 +226,7 @@ function runAgent(
     // prompt and instructions are never interpreted.
     cmd = [
       "claude", "--setting-sources", "",
-      "-p", task.prompt,
+      "-p", prompt,
       // --setting-sources '' also disables project CLAUDE.md loading, so the
       // condition's tool instructions are injected into the system prompt.
       "--append-system-prompt", condition.agents_md,
@@ -185,7 +246,7 @@ function runAgent(
       "--dangerously-bypass-approvals-and-sandbox",
       "-C", workspaceDir,
       "--ephemeral",
-      task.prompt,
+      prompt,
     ];
   }
 
@@ -197,7 +258,7 @@ function runAgent(
       timeout: 5 * 60 * 1000,
       stdio: ["pipe", "pipe", "pipe"],
       maxBuffer: 64 * 1024 * 1024,
-      env: { ...process.env },
+      env,
       cwd: workspaceDir,
     } as ExecFileSyncOptionsWithStringEncoding);
   } catch (err: unknown) {

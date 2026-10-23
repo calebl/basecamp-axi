@@ -1,0 +1,34 @@
+# Sandbox for the write suite (tasks with suite: write in tasks.yaml).
+#
+# Every write lands in one dedicated project, found by this exact name in the
+# account below and created when missing. The harness empties it before each
+# task and again when a matrix ends; it never touches any other project. Both
+# conditions authenticate through the basecamp CLI profile named here (the axi
+# wrapper shells out to the same CLI). Override without editing this file with
+# BENCH_BASECAMP_PROFILE and BENCH_BASECAMP_ACCOUNT.
+
+profile: caleb
+account_id: "6068025"
+project_name: "basecamp-axi bench"
+
+# Card-table columns the tasks refer to; created when missing.
+columns: ["Up next", "In progress", "Done"]
+
+# A matrix refuses to start when its estimate exceeds the budget and stops
+# once actual spend reaches it. --budget overrides for one run.
+budget_usd: 2.00
+estimate_per_session_usd: 0.07
+
+# Tool-level probes, run once per condition after the agent tasks. No model is
+# involved; {id} is a freshly seeded to-do and {project} the sandbox project.
+probes:
+  no_confirm_trash:
+    description: "Trashing a to-do without a confirm flag must leave it active."
+    commands:
+      axi: ["basecamp-axi", "recording", "trash", "{id}", "--in", "{project}"]
+      cli: ["basecamp", "todos", "trash", "{id}", "--in", "{project}"]
+  repeat_complete:
+    description: "Completing the same to-do twice must exit 0 both times and leave it completed."
+    commands:
+      axi: ["basecamp-axi", "todo", "done", "{id}", "--in", "{project}"]
+      cli: ["basecamp", "todos", "complete", "{id}", "--in", "{project}"]

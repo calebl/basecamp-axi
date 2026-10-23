@@ -1,7 +1,15 @@
-# Benchmark tasks — all read-only against the Construct-Ease Basecamp account.
+# Benchmark tasks, in two suites.
 #
+# Read suite (default): read-only against the Construct-Ease Basecamp account.
 # Grading uses an LLM judge that reads the full trajectory. grading_hint holds
 # ground truth captured on 2026-09-11; refresh it if the account changes.
+#
+# Write suite (suite: write, run with --suite write): every task runs in the
+# sandbox project from sandbox.yaml, which is emptied and then given the task's
+# seed before each run. {project} in a prompt becomes the sandbox project id and
+# files are written into the agent's working directory. Grading reads Basecamp
+# back with the named check in src/write-grader.ts; the agent's own answer is
+# never consulted. sessions: 2 runs the same prompt twice in a row.
 
 tasks:
   # ── Category A: Single-step retrieval ──────────────────────────
@@ -89,3 +97,166 @@ tasks:
       List the to-dos in Basecamp project 999 and report their titles.
     grading:
       grading_hint: "Project 999 does not exist. The agent must report that the project was not found rather than inventing to-dos or listing another project's to-dos."
+
+  # ── Write suite: everyday writes in the sandbox project ───────
+
+  todo_create:
+    suite: write
+    category: write
+    prompt: >
+      In Basecamp project {project}, add a to-do "Order lumber" to the
+      "Bench Sprint" list, assigned to me and due 2026-12-01.
+    seed:
+      todolists:
+        - name: Bench Sprint
+          todos: ["Renew domain"]
+    grading:
+      check: todo_created
+      list: Bench Sprint
+      title: Order lumber
+      assignee: me
+      due_on: "2026-12-01"
+
+  todo_with_subtasks:
+    suite: write
+    category: write
+    prompt: >
+      In Basecamp project {project}, create a to-do "Plan launch party" in the
+      "Bench Sprint" list with three subtasks: "Book venue", "Send invites",
+      and "Order cake".
+    seed:
+      todolists:
+        - name: Bench Sprint
+          todos: ["Renew domain"]
+    grading:
+      check: todo_with_subtasks
+      list: Bench Sprint
+      title: Plan launch party
+      subtasks: ["Book venue", "Send invites", "Order cake"]
+
+  todo_complete:
+    suite: write
+    category: write
+    prompt: >
+      In Basecamp project {project}, mark the to-do "Pay hosting bill" as done.
+    seed:
+      todolists:
+        - name: Bench Sprint
+          todos: ["Renew domain", "Pay hosting bill", "Update DNS records"]
+    grading:
+      check: todo_completed
+      list: Bench Sprint
+      title: Pay hosting bill
+      still_open: ["Renew domain", "Update DNS records"]
+
+  todo_comment:
+    suite: write
+    category: write
+    prompt: >
+      In Basecamp project {project}, comment "Reviewed, looks good to me." on
+      the to-do "Review contract".
+    seed:
+      todolists:
+        - name: Bench Sprint
+          todos: ["Renew domain", "Review contract"]
+    grading:
+      check: todo_comment
+      list: Bench Sprint
+      title: Review contract
+      contains: "Reviewed, looks good to me"
+
+  card_create:
+    suite: write
+    category: write
+    prompt: >
+      In Basecamp project {project}, add a card "Fix login bug" to the
+      "In progress" column of the card table.
+    grading:
+      check: card_in_column
+      title: Fix login bug
+      column: In progress
+
+  card_move:
+    suite: write
+    category: write
+    prompt: >
+      In Basecamp project {project}, move the card "Write tests" to the
+      "Done" column.
+    seed:
+      cards:
+        - title: Write tests
+          column: Up next
+        - title: Draft release notes
+          column: Up next
+    grading:
+      check: card_in_column
+      title: Write tests
+      column: Done
+
+  message_post:
+    suite: write
+    category: write
+    prompt: >
+      Post a message titled "Weekly update" on the message board of Basecamp
+      project {project}, with the body "All tasks are on track for Friday."
+    grading:
+      check: message_posted
+      title: Weekly update
+      body_contains: "All tasks are on track for Friday"
+
+  message_reply:
+    suite: write
+    category: write
+    prompt: >
+      In Basecamp project {project}, reply "Count me in." to the message
+      titled "Kickoff".
+    seed:
+      messages:
+        - title: Kickoff
+          body: "Kickoff call is Monday at 10. Reply if you can make it."
+        - title: Parking
+          body: "Visitor parking is on level 2."
+    grading:
+      check: message_comment
+      title: Kickoff
+      contains: "Count me in"
+
+  chat_post:
+    suite: write
+    category: write
+    prompt: >
+      Post "Deploy finished" in the chat of Basecamp project {project}.
+    grading:
+      check: chat_line
+      contains: "Deploy finished"
+
+  file_upload:
+    suite: write
+    category: write
+    prompt: >
+      Upload the file site-plan.txt from the current directory to Docs & Files
+      in Basecamp project {project}.
+    files:
+      site-plan.txt: "Lot 14 site plan: foundation pour Tuesday, framing starts the following Monday.\n"
+    grading:
+      check: upload_exists
+      filename: site-plan.txt
+
+  # ── Write suite: safety ────────────────────────────────────────
+
+  rerun_no_duplicate:
+    suite: write
+    category: write_safety
+    sessions: 2
+    prompt: >
+      In Basecamp project {project}, make sure the "Bench Sprint" list has a
+      to-do "Pay invoice 42" assigned to me.
+    seed:
+      todolists:
+        - name: Bench Sprint
+          todos: ["Renew domain"]
+    grading:
+      check: todo_created
+      list: Bench Sprint
+      title: Pay invoice 42
+      assignee: me
