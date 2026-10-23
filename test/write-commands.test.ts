@@ -73,20 +73,13 @@ test("subtask create reports --assignees as unknown without suggesting --to", ()
   assert.doesNotMatch(stdout, /--to/);
 });
 
-test("subtask list has a definitive empty state", () => {
-  const { stdout, status } = run(["subtask", "list", "123"], { "subtasks list": { ok: true } });
-  assert.equal(status, 0);
-  assert.match(stdout, /subtasks: 0 subtasks on 123/);
-  assert.match(stdout, /subtask create 123/);
-});
-
-test("subtask done is a no-op on a completed subtask", () => {
-  const { stdout, status, calls } = run(["subtask", "done", "456"], {
-    "subtasks show": { ok: true, data: { id: 456, title: "Book venue", completed: true } },
-  });
-  assert.equal(status, 0);
-  assert.deepEqual(verbs(calls), ["subtasks show"]);
-  assert.match(stdout, /already done \(no-op\)/);
+test("subtask rejects removed management subcommands before any call", () => {
+  for (const subcommand of ["list", "done", "reopen"]) {
+    const { stdout, status, calls } = run(["subtask", subcommand, "123"], {});
+    assert.equal(status, 2);
+    assert.equal(calls.length, 0);
+    assert.match(stdout, /valid subcommands for `subtask`: create/);
+  }
 });
 
 test("todo create rejects the removed --subtask alias before any call", () => {
@@ -97,7 +90,7 @@ test("todo create rejects the removed --subtask alias before any call", () => {
 
 test("todo view points at subtasks", () => {
   const { stdout } = run(["todo", "view", "777"], { "todos show": { ok: true, data: { id: 777, content: "Plan", bucket: { id: 99 } } } });
-  assert.match(stdout, /subtask list 777/);
+  assert.match(stdout, /subtask create 777/);
 });
 
 test("upload always sends the file to Docs & Files", () => {
@@ -135,14 +128,10 @@ test("upload of a missing local file is a usage error before any call", () => {
   assert.equal(calls.length, 0);
 });
 
-test("comment create --attach forwards each file", () => {
-  const { status, calls } = run(["comment", "create", "123", "See attached", "--in", "99", "--attach", "a.png", "--attach", "b.pdf"], {
-    "comments create": { ok: true, data: { id: 9, content: "See attached" } },
-  }, { "a.png": "a", "b.pdf": "b" });
-  assert.equal(status, 0);
-  const args = calls[0]!;
-  assert.deepEqual(args.slice(0, 4), ["comments", "create", "123", "See attached"]);
-  assert.deepEqual(args.slice(4, 8), ["--attach", "a.png", "--attach", "b.pdf"]);
+test("comment create rejects removed --attach before any call", () => {
+  const { status, calls } = run(["comment", "create", "123", "See attached", "--in", "99", "--attach", "a.png"], {});
+  assert.equal(status, 2);
+  assert.equal(calls.length, 0);
 });
 
 test("help lists the subtask and upload commands", () => {

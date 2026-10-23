@@ -8,7 +8,7 @@ import { renderDetail, renderHelp, renderOutput, type Row } from "../toon.js";
 import { requireProject } from "./todo.js";
 
 export const UPLOAD_HELP = `usage: basecamp-axi upload <file> [flags]
-Uploads one local file to the project's Docs & Files root. To attach a file to a todo, message, or comment instead, pass --attach <path> to that create command.
+Uploads one local file to the project's Docs & Files root.
 examples:
   basecamp-axi upload ./site-plan.pdf --in 48189809
 `;

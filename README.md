@@ -56,9 +56,7 @@ basecamp-axi todo list --in 48189809 --assignee me    # project-scoped
 basecamp-axi todo view 10170015169                    # description preview; --full for everything
 basecamp-axi todo create "Ship it" --in 48189809 --to me --due tomorrow
 basecamp-axi todo done 10170015169                    # idempotent
-basecamp-axi subtask list 10170015169
 basecamp-axi subtask create 10170015169 "Order cake"
-basecamp-axi subtask done 10170015201                 # idempotent
 basecamp-axi todolist list --in 48189809
 basecamp-axi card list --in 44361766 --column Triage
 basecamp-axi card move 10247705680 --to Done --card-table 9407211666 --in 44361766
@@ -67,7 +65,6 @@ basecamp-axi message create "Status" --body-file notes.md --in 48189809
 basecamp-axi comment list 10126503472 --in 48189809
 basecamp-axi people view 50519852                     # prints a ready-to-paste [@Jay Park](mention:<sgid>) handle
 basecamp-axi comment create 10126503472 "Thanks [@Jay Park](mention:<sgid>)" --in 48189809
-basecamp-axi comment create 10126503472 "Photo attached" --attach ./site.jpg --in 48189809
 basecamp-axi upload ./site-plan.pdf --in 48189809     # project Docs & Files root
 basecamp-axi chat post "Deployed" --in 48189809 --campfire 9169930018
 basecamp-axi people list --in 48189809 --fields email,sgid
@@ -94,12 +91,12 @@ Cross-project commands need no scope: `project list`, `report`, `search`, `peopl
 | Command    | Description                                                        |
 | ---------- | ------------------------------------------------------------------ |
 | `project`  | list, view                                                         |
-| `todo`     | list, view, create (`--attach`), done, reopen, assign, unassign |
-| `subtask`  | list, create, done, reopen (checklist items under a todo or card)  |
+| `todo`     | list, view, create, done, reopen, assign, unassign              |
+| `subtask`  | create one checklist item under a todo or card                   |
 | `todolist` | list, create                                                       |
 | `card`     | list, columns, view, create, update, move                          |
 | `message`  | list, view, create                                                 |
-| `comment`  | list, create (flat: always on the parent recording; `--attach`)    |
+| `comment`  | list, create (flat: always on the parent recording)              |
 | `upload`   | upload one file to the project's Docs & Files root                 |
 | `chat`     | list, messages, post                                               |
 | `people`   | list, view, me                                                     |
@@ -115,7 +112,7 @@ Cross-project commands need no scope: `project list`, `report`, `search`, `peopl
 - **TOON output** on stdout, errors included; stderr carries nothing an agent needs.
 - **Truncation**: descriptions and bodies are clipped (800 to 1500 chars) with the total size shown; `--full` on the same view command returns everything.
 - **Totals**: lists print `count: N of T total` when the underlying CLI reports a total, plus a hint to fetch the rest.
-- **Idempotent**: `todo done` on a completed todo reports `already done (no-op)` and exits 0; the same holds for `subtask done|reopen` and `recording trash|archive|restore`.
+- **Idempotent**: `todo done` on a completed todo reports `already done (no-op)` and exits 0; the same holds for `recording trash|archive|restore`.
 - **Confirmation gate**: trash, archive, and restore are the only commands that change visibility for other people. Without `--confirm` they are a dry run.
 - **Strict flags**: unknown flags and extra positionals exit 2 with the list of valid flags. `--json`, `--md`, and `--jq` are rejected with a hint since output is always TOON.
 - **Column names**: `card list --column`, `card create --column`, and `card move --to` accept a column name and resolve it to an id automatically when the project has one card table.

@@ -1,5 +1,5 @@
 import { bc, asList } from "../basecamp.js";
-import { parseArgs, pickSub, requirePositional, str, int, bool, list as listFlag, type FlagSpec } from "../args.js";
+import { parseArgs, pickSub, requirePositional, str, int, bool, type FlagSpec } from "../args.js";
 import { projectFlag, type CliContext } from "../context.js";
 import { AxiError } from "../errors.js";
 import { countLine, names, renderDetail, renderHelp, renderList, renderOutput, type Row } from "../toon.js";
@@ -14,7 +14,7 @@ export function cleanTitle(value: unknown): string {
   const s = String(value ?? "");
   return /<[a-z][\s\S]*>/i.test(s) ? preview(htmlToText(s), 120) : s;
 }
-import { attachFlags, readBody } from "../body.js";
+import { readBody } from "../body.js";
 
 export const TODO_HELP = `usage: basecamp-axi todo <list|view|create|done|reopen|assign|unassign> [args] [flags]
 Project scope: --in <project id|name> after the command, BASECAMP_PROJECT env, or .basecamp/config.json.
@@ -33,7 +33,6 @@ subcommands:
     --due <date>                    e.g. 2026-09-30, tomorrow, +3
     --description <markdown>        Extended description
     --description-file <path>       Read description from a file
-    --attach <path>                 Attach a local file (repeatable)
   done <id|url>...                Complete todos (idempotent)
   reopen <id|url>...                Reopen todos
   assign <id>... --to <person>      Add an assignee
@@ -59,7 +58,6 @@ const CREATE_FLAGS: FlagSpec[] = [
   { name: "--due", alias: "-d", value: true },
   { name: "--description", value: true },
   { name: "--description-file", value: true },
-  { name: "--attach", value: true, repeat: true },
 ];
 const ASSIGN_FLAGS: FlagSpec[] = [{ name: "--to", value: true }];
 const UNASSIGN_FLAGS: FlagSpec[] = [{ name: "--from", value: true }];
@@ -175,7 +173,7 @@ async function view(args: string[], ctx: CliContext | undefined): Promise<string
     renderHelp([
       ...(desc.truncated ? [`Run \`basecamp-axi todo view ${t.id} --full\` to see the complete description`] : []),
       ...((t.comments_count ?? 0) > 0 ? [`Run \`basecamp-axi comment list ${t.id}${inProject}\` to read ${t.comments_count} comments`] : []),
-      `Run \`basecamp-axi subtask list ${t.id}\` to see its subtasks, or \`basecamp-axi subtask create ${t.id} "<title>"\` to add one`,
+      `Run \`basecamp-axi subtask create ${t.id} "<title>"\` to add a subtask`,
       ...(t.completed ? [`Run \`basecamp-axi todo reopen ${t.id}\` to reopen`] : [`Run \`basecamp-axi todo done ${t.id}\` to complete`]),
     ]),
   ]);
@@ -194,7 +192,6 @@ async function create(args: string[], ctx: CliContext | undefined): Promise<stri
   if (to) bcArgs.push("--to", to);
   if (due) bcArgs.push("--due", due);
   if (description) bcArgs.push("--description", description);
-  bcArgs.push(...(await attachFlags(listFlag(parsed, "--attach"))));
   const result = await bc<Row>(bcArgs, { project, account: ctx?.account });
   const t = result.data ?? {};
   return renderOutput([
@@ -256,5 +253,3 @@ async function assign(args: string[], ctx: CliContext | undefined, action: "assi
     renderList("todos", verified, { id: (r) => r.id, title: (r) => r.title, assignees: (r) => r.assignees }),
   ]);
 }
-
-export { listFlag };
