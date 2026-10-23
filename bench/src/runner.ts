@@ -73,7 +73,11 @@ export function runOne(
   mkdirSync(artifactDir, { recursive: true });
 
   // 2. Set up an empty workspace holding only the condition's CLAUDE.md and the task's files.
-  const workspaceDir = join(artifactDir, "workspace");
+  // One fixed path per condition: the agent's system prompt names its working
+  // directory, so a per-run path would defeat prompt caching across runs.
+  // Runs within a condition are sequential, so the path is never shared.
+  const workspaceDir = join(resultsDir(task.suite), spec.condition, "workspace");
+  rmSync(workspaceDir, { recursive: true, force: true });
 
   try {
     mkdirSync(workspaceDir, { recursive: true });
@@ -235,9 +239,13 @@ function runAgent(
       "--verbose",
       "--no-session-persistence",
       "--disable-slash-commands",
+      // No MCP servers: a claude.ai Basecamp connector would otherwise offer a
+      // third route to Basecamp alongside the condition's binary.
+      "--strict-mcp-config",
       "--max-turns", "15",
       ...permissionArgs,
     ];
+    env = { ...env, ENABLE_CLAUDEAI_MCP_SERVERS: "false" };
   } else {
     cmd = [
       "codex", "exec", "--json",

@@ -7,17 +7,22 @@
 # wrapper shells out to the same CLI). Override without editing this file with
 # BENCH_BASECAMP_PROFILE and BENCH_BASECAMP_ACCOUNT.
 
-profile: caleb
-account_id: "6068025"
+profile: firstmate
+account_id: "4335650"
 project_name: "basecamp-axi bench"
 
 # Card-table columns the tasks refer to; created when missing.
 columns: ["Up next", "In progress", "Done"]
 
+# Default agent model for write tasks (--model overrides). Sonnet 5.5 keeps a
+# full matrix (24 sessions) near $1.20; claude-sonnet-5, used for the read
+# suite, measured about $0.11-0.21 per write session and would not fit.
+model: claude-sonnet-5-5
+
 # A matrix refuses to start when its estimate exceeds the budget and stops
 # once actual spend reaches it. --budget overrides for one run.
 budget_usd: 2.00
-estimate_per_session_usd: 0.07
+estimate_per_session_usd: 0.06
 
 # Tool-level probes, run once per condition after the agent tasks. No model is
 # involved; {id} is a freshly seeded to-do and {project} the sandbox project.

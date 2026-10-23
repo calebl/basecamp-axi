@@ -111,7 +111,7 @@ async function cmdRun(argv: string[]): Promise<void> {
   const repeat = parseInt(args.repeat ?? "1", 10);
   const agent = (args.agent ?? "claude") as AgentBackend;
   const defaultModel = agent === "claude" ? "claude-sonnet-5" : "gpt-5.4";
-  const model = args.model ?? defaultModel;
+  let model = args.model ?? defaultModel;
 
   if (!conditionId || !taskId) {
     console.error("Usage: bench run --condition <id> --task <id> [--repeat N] [--model M] [--agent codex|claude]");
@@ -136,6 +136,7 @@ async function cmdRun(argv: string[]): Promise<void> {
   let sandbox: Sandbox | undefined;
   if (task.suite === "write") {
     const def = loadSandboxDef();
+    if (!args.model && agent === "claude") model = def.model;
     checkBudget(sessionCount([task], 1, repeat), def, parseFloat(args.budget ?? String(def.budget_usd)));
     sandbox = openSandbox(def, { create: true });
   }
@@ -162,7 +163,7 @@ async function cmdMatrix(argv: string[]): Promise<void> {
   const repeat = parseInt(args.repeat ?? "1", 10);
   const agent = (args.agent ?? "claude") as AgentBackend;
   const defaultModel = agent === "claude" ? "claude-sonnet-5" : "gpt-5.4";
-  const model = args.model ?? defaultModel;
+  let model = args.model ?? defaultModel;
   const conditionFilter = args.condition;
   const taskFilter = args.task;
   const categoryFilter = args.category;
@@ -196,6 +197,8 @@ async function cmdMatrix(argv: string[]): Promise<void> {
       process.exit(1);
     }
     const def = loadSandboxDef();
+    if (!args.model && agent === "claude") model = def.model;
+    console.log(`Agent model: ${model}`);
     const budget = parseFloat(args.budget ?? String(def.budget_usd));
     const selected = taskIds.map((id) => tasks.get(id)).filter((t): t is TaskDef => Boolean(t));
     checkBudget(sessionCount(selected, conditionIds.length, repeat), def, budget);
@@ -345,14 +348,14 @@ Commands:
               --condition <cli|axi>
               --task <task_id>
               --repeat <N>  (default: 1)
-              --model <M>   (default: claude-sonnet-5)
+              --model <M>   (default: claude-sonnet-5; write tasks: model in config/sandbox.yaml)
               --agent <claude|codex>  (default: claude)
               --budget <usd>  (write tasks; default from config/sandbox.yaml)
 
   matrix    Run all condition × task combinations
               --suite <read|write>  (default: read)
               --repeat <N>  (default: 1)
-              --model <M>   (default: claude-sonnet-5)
+              --model <M>   (default: claude-sonnet-5; write suite: model in config/sandbox.yaml)
               --agent <claude|codex>  (default: claude)
               --condition <id,id,...>  (filter conditions)
               --task <id,id,...>       (filter tasks)

@@ -52,10 +52,11 @@ export function runProbes(sb: Sandbox, probes: SandboxDef["probes"], conditionId
         const list = sandboxReader(sb).todolists().find((l) => l.name === PROBE_LIST);
         const todo = list ? sandboxReader(sb).todos(list.id).find((t) => t.id === todoId) : undefined;
         const passed = first.exitCode === 0 && second.exitCode === 0 && Boolean(todo?.completed);
+        const noop = /no-op|already/i.test(second.output) ? ", reported as a no-op" : "";
         result = {
           condition, probe, exit_code: second.exitCode, passed,
           details: passed
-            ? `second run exit 0: ${firstLine(second.output)}`
+            ? `second run exit 0, still completed${noop}`
             : `exits ${first.exitCode}/${second.exitCode}, completed=${Boolean(todo?.completed)}: ${firstLine(second.output)}`,
         };
       } else {

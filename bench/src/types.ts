@@ -42,6 +42,8 @@ export interface SandboxDef {
   project_name: string;
   /** Columns the card table must have besides the built-in ones. */
   columns: string[];
+  /** Default agent model for write tasks; --model overrides. */
+  model: string;
   budget_usd: number;
   /** Per agent session, used for the pre-run estimate. */
   estimate_per_session_usd: number;
