@@ -88,24 +88,24 @@ Cross-project commands need no scope: `project list`, `report`, `search`, `peopl
 
 ### Commands
 
-| Command    | Description                                                        |
-| ---------- | ------------------------------------------------------------------ |
-| `project`  | list, view                                                         |
-| `todo`     | list, view, create, done, reopen, assign, unassign              |
-| `subtask`  | create one checklist item under a todo or card                   |
-| `todolist` | list, create                                                       |
-| `card`     | list, columns, view, create, update, move                          |
-| `message`  | list, view, create                                                 |
-| `comment`  | list, create (flat: always on the parent recording)              |
-| `upload`   | upload one file to the project's Docs & Files root                 |
-| `chat`     | list, messages, post                                               |
-| `people`   | list, view, me                                                     |
-| `search`   | full-text search across the account                                |
-| `report`   | assigned, overdue (cross-project)                                  |
-| `recording`| list by type and status; trash, archive, restore (require `--confirm`) |
-| `url`      | parse a Basecamp link into project, recording, and comment ids     |
-| `setup`    | install agent session hooks                                        |
-| `update`   | built-in self-update inherited from `axi-sdk-js`                   |
+| Command     | Description                                                            |
+| ----------- | ---------------------------------------------------------------------- |
+| `project`   | list, view                                                             |
+| `todo`      | list, view, create, done, reopen, assign, unassign                     |
+| `subtask`   | create one checklist item under a todo or card                         |
+| `todolist`  | list, create                                                           |
+| `card`      | list, columns, view, create, update, move                              |
+| `message`   | list, view, create                                                     |
+| `comment`   | list, create (flat: always on the parent recording)                    |
+| `upload`    | upload one file to the project's Docs & Files root                     |
+| `chat`      | list, messages, post                                                   |
+| `people`    | list, view, me                                                         |
+| `search`    | full-text search across the account                                    |
+| `report`    | assigned, overdue (cross-project)                                      |
+| `recording` | list by type and status; trash, archive, restore (require `--confirm`) |
+| `url`       | parse a Basecamp link into project, recording, and comment ids         |
+| `setup`     | install agent session hooks                                            |
+| `update`    | built-in self-update inherited from `axi-sdk-js`                       |
 
 ### Behaviour
 

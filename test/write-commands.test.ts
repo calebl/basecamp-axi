@@ -14,7 +14,7 @@ type Envelopes = Record<string, unknown>;
 
 /**
  * Run basecamp-axi against a fake `basecamp` on PATH. `responses` maps "<group> <verb>"
- * (e.g. "subtasks list") to the envelope that call prints; every call is recorded.
+ * (e.g. "subtasks create") to the envelope that call prints; every call is recorded.
  */
 function run(args: string[], responses: Envelopes, files: Record<string, string> = {}) {
   const dir = mkdtempSync(join(tmpdir(), "basecamp-axi-test-"));
