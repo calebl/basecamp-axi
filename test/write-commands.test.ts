@@ -114,6 +114,14 @@ test("upload always sends the file to Docs & Files", () => {
   assert.doesNotMatch(stdout, /bookmark_url|sgid/);
 });
 
+test("upload does not suggest unsupported --attach for --attachment", () => {
+  const { stdout, status, calls } = run(["upload", "site-plan.txt", "--in", "99", "--attachment", "photo.png"], {});
+  assert.equal(status, 2);
+  assert.equal(calls.length, 0);
+  assert.match(stdout, /unknown flag --attachment/);
+  assert.doesNotMatch(stdout, /use --attach/);
+});
+
 test("upload rejects removed mode flags before any call", () => {
   const { status, calls } = run(["upload", "site-plan.txt", "--in", "99", "--force"], {}, { "site-plan.txt": "lot 14 plan" });
   assert.equal(status, 2);
