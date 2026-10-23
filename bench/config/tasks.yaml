@@ -2,7 +2,7 @@
 #
 # Read suite (default): read-only against the Construct-Ease Basecamp account.
 # Grading uses an LLM judge that reads the full trajectory. grading_hint holds
-# ground truth captured on 2026-09-11; refresh it if the account changes.
+# ground truth captured on 2026-10-23 (first set 2026-09-11); refresh it if the account changes.
 #
 # Write suite (suite: write, run with --suite write): every task runs in the
 # sandbox project from sandbox.yaml, which is emptied and then given the task's
@@ -19,7 +19,7 @@ tasks:
     prompt: >
       How many projects are in this Basecamp account? Report the exact number.
     grading:
-      grading_hint: "The account has 26 active projects. Reporting the size of a truncated first page (for example 10 or 15) is a failure."
+      grading_hint: "The account has 40 active projects. Reporting the size of a truncated first page (for example 10 or 15) is a failure."
 
   project_tools:
     category: single_step
@@ -34,7 +34,7 @@ tasks:
     prompt: >
       Who are the people on Basecamp project 48618032? Report their names.
     grading:
-      grading_hint: "Exactly two people: Caleb LeNoir and DevAI Bot."
+      grading_hint: "Exactly two people: Caleb LeNoir and Gilfoyle AI."
 
   todolist_progress:
     category: single_step
@@ -42,7 +42,7 @@ tasks:
       In Basecamp project 48189809, report the name of each to-do list and how many
       of its to-dos are completed (as completed/total).
     grading:
-      grading_hint: "One list: 'ConstructEase – Advanced Warehousing' with 0 of 12 completed (0/12)."
+      grading_hint: "Two lists: 'TEST' with 0/0 (empty) and 'ConstructEase – Advanced Warehousing' with 0 of 13 completed (0/13)."
 
   triage_card_count:
     category: single_step
@@ -69,7 +69,7 @@ tasks:
       and how many of them are overdue? Report the count of open items, the count
       that are overdue, and the title of any overdue item.
     grading:
-      grading_hint: "8 open items are assigned to Caleb LeNoir (3 cards, 5 to-dos). Exactly 1 is overdue: the card 'Install Date Match Group' in the Bugs project, due 2026-08-28. Reporting only to-dos and missing the cards, or only one project, is a failure."
+      grading_hint: "Caleb LeNoir has 5-6 open to-dos and 1 card ('Set up Gilfoyle's new machine ...') across several projects; the assignments report also lists 24 card steps, so a total of 6, 7 or 30 is correct when the agent says what it counted. None of them has a due date, so 0 are overdue. Reporting any item as overdue, or missing the card, is a failure."
 
   overdue_oldest:
     category: multi_step
@@ -77,7 +77,7 @@ tasks:
       Across all Basecamp projects, how many to-dos are overdue, and which one has
       the oldest due date? Report the count, the to-do title, and its due date.
     grading:
-      grading_hint: "5 overdue to-dos. The oldest is 'Initial Concept Framework' in project KEP Multi Family, due 2025-12-22."
+      grading_hint: "30 overdue to-dos as of 2026-10-23 (the count grows as days pass; 28-34 is acceptable). The oldest is 'Initial Concept Framework' in project KEP Multi Family, due 2025-12-22."
 
   url_resolve:
     category: multi_step
