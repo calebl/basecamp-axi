@@ -1,6 +1,6 @@
 ---
 name: basecamp-axi
-description: "Operate Basecamp through the basecamp-axi CLI - projects, todos, todolists, cards (kanban), messages, comments, campfire chat, people, search, cross-project reports, archiving or trashing recordings, and URL parsing. Use whenever a task touches Basecamp: checking what is assigned to you, listing or creating todos, completing or reassigning work, reading or replying to messages and comments, moving cards, posting to chat, or resolving a Basecamp link."
+description: "Operate Basecamp through the basecamp-axi CLI - projects, todos and their subtasks, todolists, cards (kanban), messages, comments, file uploads to Docs & Files, campfire chat, people, search, cross-project reports, archiving or trashing recordings, and URL parsing. Use whenever a task touches Basecamp: checking what is assigned to you, listing or creating todos and subtasks, completing or reassigning work, reading or replying to messages and comments, moving cards, uploading or attaching files, posting to chat, or resolving a Basecamp link."
 user-invocable: false
 ---
 
@@ -16,7 +16,7 @@ If a command fails with an authentication error, ask the user to run `basecamp a
 
 ## When to use
 
-Use basecamp-axi whenever a task touches Basecamp: seeing what is assigned to you or overdue; listing, viewing, creating, completing, or reassigning todos; browsing todolists; listing, viewing, creating, or moving kanban cards; reading or posting messages; reading or adding comments; posting to Campfire chat; looking up people and mention handles; searching the account; or turning a Basecamp URL into ids.
+Use basecamp-axi whenever a task touches Basecamp: seeing what is assigned to you or overdue; listing, viewing, creating, completing, or reassigning todos and their subtasks; browsing todolists; listing, viewing, creating, or moving kanban cards; reading or posting messages; reading or adding comments; uploading files to Docs & Files or attaching them to a todo, message, or comment; posting to Campfire chat; looking up people and mention handles; searching the account; or turning a Basecamp URL into ids.
 
 ## Workflow
 
@@ -31,8 +31,8 @@ Use basecamp-axi whenever a task touches Basecamp: seeing what is assigned to yo
 ## Commands
 
 ```
-commands[14]:
-  (none)=dashboard, project, todo, todolist, card, message, comment, chat, people, search, report, recording, url, setup
+commands[16]:
+  (none)=dashboard, project, todo, subtask, todolist, card, message, comment, upload, chat, people, search, report, recording, url, setup
 ```
 
 Installed copies also inherit the SDK built-in `update` command (`basecamp-axi update --check`).
@@ -43,6 +43,8 @@ Run `npx -y basecamp-axi --help` for global flags, or `npx -y basecamp-axi <comm
 
 - Output is TOON-encoded and token-efficient; pipe through grep/head only when a list is very long.
 - `todo done` and `todo reopen` are idempotent: an already-done todo reports `already done (no-op)` with exit 0.
+- Subtasks are real checklist items under a todo or card, not separate todos. Create several in one call with `subtask create <todo id> "A" "B" "C"`, or pass `--subtask "A" --subtask "B"` to `todo create`. Titles the parent already has are skipped, so reruns do not duplicate; `subtask done|reopen` are idempotent too.
+- `upload <file> --in <project>` puts a file in Docs & Files; a same-name, same-size file already there is reported as `already uploaded (no-op)`. To attach a file to a todo, message, or comment instead, pass `--attach <path>` (repeatable) to `todo create`, `message create`, or `comment create`.
 - Message bodies and comment text accept Markdown. Mention people with `[@Name](mention:<sgid>)`; `people view <id>` prints the exact handle and `people list --fields sgid` adds the sgid column. The `person:<id>` form is not reliable.
 - For multi-line text, write it to a UTF-8 file and pass `--body-file <path>` (messages, comments) or `--description-file <path>` (todos).
 - Cards: column names are resolved to ids automatically (`card move <id> --to Done`); pass `--card-table <id>` only when a project has several tables.

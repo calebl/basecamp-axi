@@ -29,6 +29,8 @@ const RENAMED: Record<string, string> = {
   "--assignee": "use --assignee only on `todo list`; on create use --to",
   "--completed": "use --status completed instead",
   "--body-file": "use --body-file only on `message create` and `comment create`",
+  "--attachment": "use --attach <path> (repeatable)",
+  "--assignees": "use --to instead",
 };
 
 export interface ParsedArgs {

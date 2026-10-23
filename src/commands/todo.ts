@@ -14,7 +14,8 @@ export function cleanTitle(value: unknown): string {
   const s = String(value ?? "");
   return /<[a-z][\s\S]*>/i.test(s) ? preview(htmlToText(s), 120) : s;
 }
-import { readBody } from "../body.js";
+import { attachFlags, readBody } from "../body.js";
+import { createSubtasks } from "./subtask.js";
 
 export const TODO_HELP = `usage: basecamp-axi todo <list|view|create|done|reopen|assign|unassign> [args] [flags]
 Project scope: --in <project id|name> after the command, BASECAMP_PROJECT env, or .basecamp/config.json.
@@ -33,7 +34,9 @@ subcommands:
     --due <date>                    e.g. 2026-09-30, tomorrow, +3
     --description <markdown>        Extended description
     --description-file <path>       Read description from a file
-  done <id|url>...                  Complete todos (idempotent)
+    --subtask "<title>"             Add a subtask (repeatable; see \`basecamp-axi subtask --help\`)
+    --attach <path>                 Attach a local file (repeatable)
+  done <id|url>...                Complete todos (idempotent)
   reopen <id|url>...                Reopen todos
   assign <id>... --to <person>      Add an assignee
   unassign <id>... --from <person>  Remove an assignee
@@ -41,6 +44,7 @@ examples:
   basecamp-axi todo list --in 48189809 --assignee me
   basecamp-axi todo view 10170015169
   basecamp-axi todo create "Ship the fix" --in 48189809 --list "Sprint 4" --to me --due tomorrow
+  basecamp-axi todo create "Plan launch party" --in 48189809 --subtask "Book venue" --subtask "Send invites"
   basecamp-axi todo done 10170015169
 `;
 
@@ -58,6 +62,8 @@ const CREATE_FLAGS: FlagSpec[] = [
   { name: "--due", alias: "-d", value: true },
   { name: "--description", value: true },
   { name: "--description-file", value: true },
+  { name: "--subtask", value: true, repeat: true },
+  { name: "--attach", value: true, repeat: true },
 ];
 const ASSIGN_FLAGS: FlagSpec[] = [{ name: "--to", value: true }];
 const UNASSIGN_FLAGS: FlagSpec[] = [{ name: "--from", value: true }];
@@ -173,6 +179,7 @@ async function view(args: string[], ctx: CliContext | undefined): Promise<string
     renderHelp([
       ...(desc.truncated ? [`Run \`basecamp-axi todo view ${t.id} --full\` to see the complete description`] : []),
       ...((t.comments_count ?? 0) > 0 ? [`Run \`basecamp-axi comment list ${t.id}${inProject}\` to read ${t.comments_count} comments`] : []),
+      `Run \`basecamp-axi subtask list ${t.id}\` to see its subtasks, or \`basecamp-axi subtask create ${t.id} "<title>"\` to add one`,
       ...(t.completed ? [`Run \`basecamp-axi todo reopen ${t.id}\` to reopen`] : [`Run \`basecamp-axi todo done ${t.id}\` to complete`]),
     ]),
   ]);
@@ -191,8 +198,11 @@ async function create(args: string[], ctx: CliContext | undefined): Promise<stri
   if (to) bcArgs.push("--to", to);
   if (due) bcArgs.push("--due", due);
   if (description) bcArgs.push("--description", description);
+  bcArgs.push(...(await attachFlags(listFlag(parsed, "--attach"))));
+  const subtaskTitles = listFlag(parsed, "--subtask").map((s) => s.trim()).filter(Boolean);
   const result = await bc<Row>(bcArgs, { project, account: ctx?.account });
   const t = result.data ?? {};
+  const subtasks = t.id && subtaskTitles.length > 0 ? await createSubtasks(String(t.id), subtaskTitles, {}, ctx) : [];
   return renderOutput([
     renderDetail("created", t, {
       id: (x) => x.id,
@@ -201,8 +211,10 @@ async function create(args: string[], ctx: CliContext | undefined): Promise<stri
       assignees: (x) => names(x.assignees),
       url: (x) => x.app_url,
     }),
+    ...(subtasks.length > 0 ? [renderList("subtasks", subtasks, { id: (r) => r.id, title: (r) => r.title, result: (r) => r.result })] : []),
     renderHelp([
       ...(t.id ? [`Run \`basecamp-axi todo view ${t.id}\` to confirm`, `Run \`basecamp-axi todo done ${t.id}\` when finished`] : []),
+      ...(t.id && subtasks.length === 0 ? [`Run \`basecamp-axi subtask create ${t.id} "<title>"...\` to add subtasks`] : []),
     ]),
   ]);
 }

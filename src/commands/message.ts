@@ -1,9 +1,9 @@
 import { bc, asList } from "../basecamp.js";
-import { parseArgs, pickSub, requirePositional, str, int, bool, type FlagSpec } from "../args.js";
+import { parseArgs, pickSub, requirePositional, str, int, bool, list as listFlag, type FlagSpec } from "../args.js";
 import { projectFlag, type CliContext } from "../context.js";
 import { countLine, renderDetail, renderHelp, renderList, renderOutput, type Row } from "../toon.js";
 import { htmlToText, relativeTime, truncate } from "../text.js";
-import { readBody } from "../body.js";
+import { attachFlags, readBody } from "../body.js";
 import { requireProject } from "./todo.js";
 
 export const MESSAGE_HELP = `usage: basecamp-axi message <list|view|create> [args] [flags]
@@ -15,6 +15,7 @@ subcommands:
   create "<title>"                  Post a message (body is Markdown; @mentions supported)
     --body <markdown>               Inline body
     --body-file <path>              Body from a file
+    --attach <path>                 Attach a local file (repeatable)
     --draft                         Save as draft instead of publishing
     --no-subscribe                  Post silently (no notifications)
 examples:
@@ -28,6 +29,7 @@ const VIEW_FLAGS: FlagSpec[] = [{ name: "--full" }];
 const CREATE_FLAGS: FlagSpec[] = [
   { name: "--body", value: true },
   { name: "--body-file", value: true },
+  { name: "--attach", value: true, repeat: true },
   { name: "--draft" },
   { name: "--no-subscribe" },
 ];
@@ -104,6 +106,7 @@ async function create(args: string[], ctx: CliContext | undefined): Promise<stri
   const bcArgs = ["messages", "create", title, body];
   if (bool(parsed, "--draft")) bcArgs.push("--draft");
   if (bool(parsed, "--no-subscribe")) bcArgs.push("--no-subscribe");
+  bcArgs.push(...(await attachFlags(listFlag(parsed, "--attach"))));
   const result = await bc<Row>(bcArgs, { project, account: ctx?.account });
   const m = result.data ?? {};
   return renderOutput([
