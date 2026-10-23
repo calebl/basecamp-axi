@@ -34,7 +34,7 @@ examples:
   basecamp-axi todo view 10170015169
   basecamp-axi todo create "Ship it" --in 48189809 --to me --due tomorrow
   basecamp-axi comment create 10170015169 "Done in abc123" --in 48189809
-  basecamp-axi subtask create 10170015169 "Book venue" "Send invites"
+  basecamp-axi subtask create 10170015169 "Book venue"
   basecamp-axi upload ./site-plan.pdf --in 48189809
   basecamp-axi report assigned
   basecamp-axi url parse "<basecamp url>"

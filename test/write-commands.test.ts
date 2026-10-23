@@ -48,17 +48,21 @@ process.exit(env.ok ? 0 : 7);
 
 const verbs = (calls: string[][]) => calls.map((c) => c.slice(0, 2).join(" "));
 
-test("subtask create skips titles the parent already has and creates the rest", () => {
-  const { stdout, status, calls } = run(["subtask", "create", "123", "Book venue", "Send invites", "--to", "me"], {
-    "subtasks list": { ok: true, data: [{ id: 1, title: "Book venue", completed: false }] },
-    "subtasks create": { ok: true, data: { id: 2, title: "Send invites" } },
+test("subtask create creates one title without pre-listing", () => {
+  const { stdout, status, calls } = run(["subtask", "create", "123", "Book venue"], {
+    "subtasks create": { ok: true, data: { id: 2, title: "Book venue" } },
   });
   assert.equal(status, 0);
-  const creates = calls.filter((c) => c[1] === "create");
-  assert.equal(creates.length, 1);
-  assert.deepEqual(creates[0]!.slice(0, 6), ["subtasks", "create", "123", "Send invites", "--assignees", "me"]);
-  assert.match(stdout, /Book venue,already exists \(no-op\)/);
-  assert.match(stdout, /Send invites,created/);
+  assert.deepEqual(calls[0]!.slice(0, 4), ["subtasks", "create", "123", "Book venue"]);
+  assert.deepEqual(verbs(calls), ["subtasks create"]);
+  assert.match(stdout, /created:/);
+  assert.match(stdout, /title: Book venue/);
+});
+
+test("subtask create rejects multiple titles before any call", () => {
+  const { status, calls } = run(["subtask", "create", "123", "Book venue", "Send invites"], {});
+  assert.equal(status, 2);
+  assert.equal(calls.length, 0);
 });
 
 test("subtask list has a definitive empty state", () => {
@@ -77,22 +81,10 @@ test("subtask done is a no-op on a completed subtask", () => {
   assert.match(stdout, /already done \(no-op\)/);
 });
 
-test("todo create --subtask adds subtasks to the new todo", () => {
-  const { stdout, status, calls } = run(
-    ["todo", "create", "Plan launch party", "--in", "99", "--subtask", "Book venue", "--subtask", "Order cake"],
-    {
-      "todos create": { ok: true, data: { id: 777, content: "Plan launch party" } },
-      "subtasks list": { ok: true },
-      "subtasks create": { ok: true, data: { id: 1, title: "x" } },
-    },
-  );
-  assert.equal(status, 0);
-  assert.deepEqual(verbs(calls), ["todos create", "subtasks list", "subtasks create", "subtasks create"]);
-  assert.deepEqual(calls.filter((c) => c[1] === "create" && c[0] === "subtasks").map((c) => c.slice(2, 4)), [
-    ["777", "Book venue"],
-    ["777", "Order cake"],
-  ]);
-  assert.match(stdout, /subtasks\[2\]/);
+test("todo create rejects the removed --subtask alias before any call", () => {
+  const { status, calls } = run(["todo", "create", "Plan launch party", "--in", "99", "--subtask", "Book venue"], {});
+  assert.equal(status, 2);
+  assert.equal(calls.length, 0);
 });
 
 test("todo view points at subtasks", () => {
@@ -100,14 +92,13 @@ test("todo view points at subtasks", () => {
   assert.match(stdout, /subtask list 777/);
 });
 
-test("upload sends the file to Docs & Files when nothing matches", () => {
+test("upload always sends the file to Docs & Files", () => {
   const { stdout, status, calls } = run(["upload", "site-plan.txt", "--in", "99"], {
-    "uploads list": { ok: true, data: [{ id: 5, filename: "other.txt", byte_size: 3 }] },
     "uploads create": { ok: true, data: { id: 6, filename: "site-plan.txt", byte_size: 11, content_type: "text/plain", app_url: "https://x" } },
   }, { "site-plan.txt": "lot 14 plan" });
   assert.equal(status, 0);
-  assert.deepEqual(verbs(calls), ["uploads list", "uploads create"]);
-  const create = calls[1]!;
+  assert.deepEqual(verbs(calls), ["uploads create"]);
+  const create = calls[0]!;
   assert.equal(create[2], "site-plan.txt");
   assert.deepEqual(create.slice(create.indexOf("--in"), create.indexOf("--in") + 2), ["--in", "99"]);
   assert.match(stdout, /uploaded:/);
@@ -115,27 +106,10 @@ test("upload sends the file to Docs & Files when nothing matches", () => {
   assert.doesNotMatch(stdout, /bookmark_url|sgid/);
 });
 
-test("upload is a no-op when the same file is already there", () => {
-  const { stdout, status, calls } = run(["upload", "site-plan.txt", "--in", "99"], {
-    "uploads list": { ok: true, data: [{ id: 6, filename: "site-plan.txt", byte_size: 11 }] },
-  }, { "site-plan.txt": "lot 14 plan" });
-  assert.equal(status, 0);
-  assert.deepEqual(verbs(calls), ["uploads list"]);
-  assert.match(stdout, /already uploaded \(no-op\)/);
-});
-
-test("upload refuses a same-name file with different content unless --force", () => {
-  const responses = {
-    "uploads list": { ok: true, data: [{ id: 6, filename: "site-plan.txt", byte_size: 999 }] },
-    "uploads create": { ok: true, data: { id: 7, filename: "site-plan.txt" } },
-  };
-  const refused = run(["upload", "site-plan.txt", "--in", "99"], responses, { "site-plan.txt": "lot 14 plan" });
-  assert.equal(refused.status, 1);
-  assert.match(refused.stdout, /code: CONFLICT/);
-  assert.match(refused.stdout, /--force/);
-  const forced = run(["upload", "site-plan.txt", "--in", "99", "--force"], responses, { "site-plan.txt": "lot 14 plan" });
-  assert.equal(forced.status, 0);
-  assert.deepEqual(verbs(forced.calls), ["uploads create"]);
+test("upload rejects removed mode flags before any call", () => {
+  const { status, calls } = run(["upload", "site-plan.txt", "--in", "99", "--force"], {}, { "site-plan.txt": "lot 14 plan" });
+  assert.equal(status, 2);
+  assert.equal(calls.length, 0);
 });
 
 test("upload of a missing local file is a usage error before any call", () => {

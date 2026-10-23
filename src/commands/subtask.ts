@@ -1,7 +1,7 @@
 import { bc, asList } from "../basecamp.js";
-import { parseArgs, pickSub, requirePositional, str, int, type FlagSpec } from "../args.js";
+import { parseArgs, pickSub, requirePositional, int, type FlagSpec } from "../args.js";
 import { projectFlag, type CliContext } from "../context.js";
-import { countLine, names, renderHelp, renderList, renderOutput, type Row } from "../toon.js";
+import { countLine, names, renderDetail, renderHelp, renderList, renderOutput, type Row } from "../toon.js";
 import { dueStatus } from "../text.js";
 
 export const SUBTASK_HELP = `usage: basecamp-axi subtask <list|create|done|reopen> [args] [flags]
@@ -9,22 +9,17 @@ Subtasks are the checklist items under a to-do or a card, addressed by the paren
 subcommands:
   list <todo|card id|url>           Subtasks in position order
     --limit <n>                     Default 100
-  create <todo|card id|url> "<title>"...  Add one or more subtasks (skips titles already present)
-    --to <person|me>                Assignee(s), comma-separated
-    --due <date>                    e.g. 2026-09-30, friday
+  create <todo|card id|url> "<title>"  Add one subtask
   done <subtask id|url>...          Complete subtasks (idempotent)
   reopen <subtask id|url>...        Reopen subtasks (idempotent)
 examples:
   basecamp-axi subtask list 10170015169
-  basecamp-axi subtask create 10170015169 "Book venue" "Send invites" "Order cake"
+  basecamp-axi subtask create 10170015169 "Book venue"
   basecamp-axi subtask done 10170015201
 `;
 
 const LIST_FLAGS: FlagSpec[] = [{ name: "--limit", alias: "-n", value: true }];
-const CREATE_FLAGS: FlagSpec[] = [
-  { name: "--to", value: true },
-  { name: "--due", alias: "-d", value: true },
-];
+const CREATE_FLAGS: FlagSpec[] = [];
 
 const subtaskSchema = {
   id: (s: Row) => s.id,
@@ -80,45 +75,17 @@ async function list(args: string[], ctx: CliContext | undefined): Promise<string
 }
 
 async function create(args: string[], ctx: CliContext | undefined): Promise<string> {
-  const parsed = parseArgs(args, CREATE_FLAGS, { command: "subtask create", maxPositionals: Infinity });
-  const usage = 'basecamp-axi subtask create <todo|card id|url> "<title>"...';
+  const parsed = parseArgs(args, CREATE_FLAGS, { command: "subtask create", maxPositionals: 2 });
+  const usage = 'basecamp-axi subtask create <todo|card id|url> "<title>"';
   const parent = requirePositional(parsed, 0, "todo|card id|url", usage);
-  requirePositional(parsed, 1, "title", usage);
-  const titles = parsed.positionals.slice(1).map((t) => t.trim()).filter(Boolean);
-  const rows = await createSubtasks(parent, titles, { to: str(parsed, "--to"), due: str(parsed, "--due") }, ctx);
+  const title = requirePositional(parsed, 1, "title", usage);
+  const result = await bc<Row>(["subtasks", "create", parent, title], { project: ctx?.project, account: ctx?.account });
+  const s = result.data ?? {};
   const pf = projectFlag(ctx);
   return renderOutput([
-    renderList("subtasks", rows, { id: (r) => r.id, title: (r) => r.title, result: (r) => r.result }),
+    renderDetail("created", s, { id: (r) => r.id, title: (r) => r.title ?? title }),
     renderHelp([`Run \`basecamp-axi subtask list ${parent}${pf}\` to confirm`, `Run \`basecamp-axi subtask done <id>${pf}\` when one is finished`]),
   ]);
-}
-
-/** Create subtasks under a parent, skipping titles it already has so reruns never duplicate. */
-export async function createSubtasks(
-  parent: string,
-  titles: string[],
-  options: { to?: string | undefined; due?: string | undefined },
-  ctx: CliContext | undefined,
-): Promise<Row[]> {
-  const { rows: existing } = await fetchSubtasks(parent, ctx);
-  const byTitle = new Map(existing.map((s) => [normalize(s.title ?? s.content), s]));
-  const rows: Row[] = [];
-  for (const title of titles) {
-    const key = normalize(title);
-    const found = byTitle.get(key);
-    if (found) {
-      rows.push({ id: found.id, title: found.title ?? title, result: "already exists (no-op)" });
-      continue;
-    }
-    const bcArgs = ["subtasks", "create", parent, title];
-    if (options.to) bcArgs.push("--assignees", options.to);
-    if (options.due) bcArgs.push("--due", options.due);
-    const result = await bc<Row>(bcArgs, { project: ctx?.project, account: ctx?.account });
-    const s = result.data ?? {};
-    byTitle.set(key, s);
-    rows.push({ id: s.id ?? "?", title: s.title ?? title, result: "created" });
-  }
-  return rows;
 }
 
 async function toggle(args: string[], ctx: CliContext | undefined, action: "done" | "reopen"): Promise<string> {
@@ -141,8 +108,4 @@ async function toggle(args: string[], ctx: CliContext | undefined, action: "done
     renderList("subtasks", rows, { id: (r) => r.id, title: (r) => r.title, result: (r) => r.result }),
     renderHelp([wantCompleted ? "Run `basecamp-axi subtask reopen <id>` to undo" : "Run `basecamp-axi subtask done <id>` to complete again"]),
   ]);
-}
-
-function normalize(value: unknown): string {
-  return String(value ?? "").trim().replace(/\s+/g, " ").toLowerCase();
 }

@@ -24,7 +24,7 @@ Same success rate with 35% fewer input tokens, 43% lower cost, and 43% less wall
 | **basecamp-axi** | 9/11    | **83,967**       | **$0.028**    | **8.1s**     | **4**     |
 | basecamp CLI     | 10/11   | 125,552          | $0.047        | 11.3s        | 5         |
 
-On the nine writes both tools support, both passed every task, and basecamp-axi used 36% fewer input tokens, cost 44% less, and finished 29% faster. Repeating a task was the widest gap: neither agent created a duplicate, but the CLI agent took 17 turns and the basecamp-axi agent took 7. The two basecamp-axi failures are missing commands: it cannot create subtasks or upload files yet. The raw CLI agent did not find native subtasks either. In the safety probes, the raw CLI trashed an item at once without confirmation; basecamp-axi treated the same request as a dry run until `--confirm` was added. Full write-up: [`bench/published-results/write/STUDY.md`](bench/published-results/write/STUDY.md).
+On the nine writes both tools support, both passed every task, and basecamp-axi used 36% fewer input tokens, cost 44% less, and finished 29% faster. Repeating a task was the widest gap: neither agent created a duplicate, but the CLI agent took 17 turns and the basecamp-axi agent took 7. The two basecamp-axi failures exposed commands that were missing at benchmark time: creating subtasks and uploading files. The raw CLI agent did not find native subtasks either. In the safety probes, the raw CLI trashed an item at once without confirmation; basecamp-axi treated the same request as a dry run until `--confirm` was added. Full write-up: [`bench/published-results/write/STUDY.md`](bench/published-results/write/STUDY.md).
 
 ## Quick start
 
@@ -56,9 +56,8 @@ basecamp-axi todo list --in 48189809 --assignee me    # project-scoped
 basecamp-axi todo view 10170015169                    # description preview; --full for everything
 basecamp-axi todo create "Ship it" --in 48189809 --to me --due tomorrow
 basecamp-axi todo done 10170015169                    # idempotent
-basecamp-axi todo create "Plan launch" --in 48189809 --subtask "Book venue" --subtask "Send invites"
 basecamp-axi subtask list 10170015169
-basecamp-axi subtask create 10170015169 "Order cake" "Hire DJ"   # skips titles already there
+basecamp-axi subtask create 10170015169 "Order cake"
 basecamp-axi subtask done 10170015201                 # idempotent
 basecamp-axi todolist list --in 48189809
 basecamp-axi card list --in 44361766 --column Triage
@@ -69,8 +68,7 @@ basecamp-axi comment list 10126503472 --in 48189809
 basecamp-axi people view 50519852                     # prints a ready-to-paste [@Jay Park](mention:<sgid>) handle
 basecamp-axi comment create 10126503472 "Thanks [@Jay Park](mention:<sgid>)" --in 48189809
 basecamp-axi comment create 10126503472 "Photo attached" --attach ./site.jpg --in 48189809
-basecamp-axi upload ./site-plan.pdf --in 48189809     # Docs & Files; same name and size is a no-op
-basecamp-axi upload list --in 48189809
+basecamp-axi upload ./site-plan.pdf --in 48189809     # project Docs & Files root
 basecamp-axi chat post "Deployed" --in 48189809 --campfire 9169930018
 basecamp-axi people list --in 48189809 --fields email,sgid
 basecamp-axi search "pull sheet"
@@ -96,13 +94,13 @@ Cross-project commands need no scope: `project list`, `report`, `search`, `peopl
 | Command    | Description                                                        |
 | ---------- | ------------------------------------------------------------------ |
 | `project`  | list, view                                                         |
-| `todo`     | list, view, create (`--subtask`, `--attach`), done, reopen, assign, unassign |
+| `todo`     | list, view, create (`--attach`), done, reopen, assign, unassign |
 | `subtask`  | list, create, done, reopen (checklist items under a todo or card)  |
 | `todolist` | list, create                                                       |
 | `card`     | list, columns, view, create, update, move                          |
 | `message`  | list, view, create                                                 |
 | `comment`  | list, create (flat: always on the parent recording; `--attach`)    |
-| `upload`   | upload a file to Docs & Files; list                                |
+| `upload`   | upload one file to the project's Docs & Files root                 |
 | `chat`     | list, messages, post                                               |
 | `people`   | list, view, me                                                     |
 | `search`   | full-text search across the account                                |
@@ -117,7 +115,7 @@ Cross-project commands need no scope: `project list`, `report`, `search`, `peopl
 - **TOON output** on stdout, errors included; stderr carries nothing an agent needs.
 - **Truncation**: descriptions and bodies are clipped (800 to 1500 chars) with the total size shown; `--full` on the same view command returns everything.
 - **Totals**: lists print `count: N of T total` when the underlying CLI reports a total, plus a hint to fetch the rest.
-- **Idempotent**: `todo done` on a completed todo reports `already done (no-op)` and exits 0; the same holds for `subtask done|reopen` and `recording trash|archive|restore`. `subtask create` (and `todo create --subtask`) skips titles the parent already has, and `upload` skips a file whose name and size match one already in the folder (`--force` uploads anyway).
+- **Idempotent**: `todo done` on a completed todo reports `already done (no-op)` and exits 0; the same holds for `subtask done|reopen` and `recording trash|archive|restore`.
 - **Confirmation gate**: trash, archive, and restore are the only commands that change visibility for other people. Without `--confirm` they are a dry run.
 - **Strict flags**: unknown flags and extra positionals exit 2 with the list of valid flags. `--json`, `--md`, and `--jq` are rejected with a hint since output is always TOON.
 - **Column names**: `card list --column`, `card create --column`, and `card move --to` accept a column name and resolve it to an id automatically when the project has one card table.
