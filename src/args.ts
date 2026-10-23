@@ -30,7 +30,6 @@ const RENAMED: Record<string, string> = {
   "--completed": "use --status completed instead",
   "--body-file": "use --body-file only on `message create` and `comment create`",
   "--attachment": "use --attach <path> (repeatable)",
-  "--assignees": "use --to instead",
 };
 
 export interface ParsedArgs {
@@ -97,7 +96,7 @@ export function parseArgs(args: string[], specs: FlagSpec[], options: ParseOptio
 }
 
 function unknownFlag(name: string, command: string, specs: FlagSpec[]): AxiError {
-  const hint = name === "--assignees" && !specs.some((spec) => spec.name === "--to") ? undefined : RENAMED[name];
+  const hint = RENAMED[name];
   const suggestions = hint ? [`${name}: ${hint}`, validFlagsLine(command, specs)] : [validFlagsLine(command, specs)];
   return new AxiError(`unknown flag ${name} for \`${command}\``, "VALIDATION_ERROR", suggestions);
 }

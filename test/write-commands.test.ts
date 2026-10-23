@@ -65,18 +65,12 @@ test("subtask create rejects multiple titles before any call", () => {
   assert.equal(calls.length, 0);
 });
 
-test("subtask create does not suggest unsupported --to for --assignees", () => {
+test("subtask create reports --assignees as unknown without suggesting --to", () => {
   const { stdout, status, calls } = run(["subtask", "create", "123", "Book venue", "--assignees", "me"], {});
   assert.equal(status, 2);
   assert.equal(calls.length, 0);
+  assert.match(stdout, /unknown flag --assignees/);
   assert.doesNotMatch(stdout, /--to/);
-});
-
-test("todo create still maps --assignees to its supported --to flag", () => {
-  const { stdout, status, calls } = run(["todo", "create", "Book venue", "--in", "99", "--assignees", "me"], {});
-  assert.equal(status, 2);
-  assert.equal(calls.length, 0);
-  assert.match(stdout, /--assignees: use --to instead/);
 });
 
 test("subtask list has a definitive empty state", () => {
