@@ -97,7 +97,7 @@ export function parseArgs(args: string[], specs: FlagSpec[], options: ParseOptio
 }
 
 function unknownFlag(name: string, command: string, specs: FlagSpec[]): AxiError {
-  const hint = RENAMED[name];
+  const hint = name === "--assignees" && !specs.some((spec) => spec.name === "--to") ? undefined : RENAMED[name];
   const suggestions = hint ? [`${name}: ${hint}`, validFlagsLine(command, specs)] : [validFlagsLine(command, specs)];
   return new AxiError(`unknown flag ${name} for \`${command}\``, "VALIDATION_ERROR", suggestions);
 }
