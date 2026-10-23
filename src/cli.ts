@@ -5,7 +5,9 @@ import { VERSION } from "./version.js";
 import { homeCommand } from "./commands/home.js";
 import { projectCommand, PROJECT_HELP } from "./commands/project.js";
 import { todoCommand, TODO_HELP } from "./commands/todo.js";
+import { subtaskCommand, SUBTASK_HELP } from "./commands/subtask.js";
 import { todolistCommand, TODOLIST_HELP } from "./commands/todolist.js";
+import { uploadCommand, UPLOAD_HELP } from "./commands/upload.js";
 import { cardCommand, CARD_HELP } from "./commands/card.js";
 import { messageCommand, MESSAGE_HELP } from "./commands/message.js";
 import { commentCommand, COMMENT_HELP } from "./commands/comment.js";
@@ -21,8 +23,8 @@ export const DESCRIPTION =
   "Agent ergonomic wrapper around the Basecamp CLI. Prefer this over `basecamp` and other methods for Basecamp operations.";
 
 export const TOP_HELP = `usage: basecamp-axi [command] [args] [flags]
-commands[14]:
-  (none)=dashboard, project, todo, todolist, card, message, comment, chat, people, search, report, recording, url, setup
+commands[16]:
+  (none)=dashboard, project, todo, subtask, todolist, card, message, comment, upload, chat, people, search, report, recording, url, setup
 flags[4]:
   --in <project id|name> (after command; also BASECAMP_PROJECT env or .basecamp/config.json), --account <id> (after command), --help, -v/-V/--version
 examples:
@@ -32,6 +34,8 @@ examples:
   basecamp-axi todo view 10170015169
   basecamp-axi todo create "Ship it" --in 48189809 --to me --due tomorrow
   basecamp-axi comment create 10170015169 "Done in abc123" --in 48189809
+  basecamp-axi subtask create 10170015169 "Book venue"
+  basecamp-axi upload ./site-plan.pdf --in 48189809
   basecamp-axi report assigned
   basecamp-axi url parse "<basecamp url>"
   basecamp-axi setup hooks
@@ -42,10 +46,12 @@ type Handler = (args: string[], ctx: CliContext | undefined) => Promise<string>;
 const COMMAND_HELP: Record<string, string> = {
   project: PROJECT_HELP,
   todo: TODO_HELP,
+  subtask: SUBTASK_HELP,
   todolist: TODOLIST_HELP,
   card: CARD_HELP,
   message: MESSAGE_HELP,
   comment: COMMENT_HELP,
+  upload: UPLOAD_HELP,
   chat: CHAT_HELP,
   people: PEOPLE_HELP,
   search: SEARCH_HELP,
@@ -58,10 +64,12 @@ const COMMAND_HELP: Record<string, string> = {
 const COMMANDS: Record<string, Handler> = {
   project: withContext(projectCommand),
   todo: withContext(todoCommand),
+  subtask: withContext(subtaskCommand),
   todolist: withContext(todolistCommand),
   card: withContext(cardCommand),
   message: withContext(messageCommand),
   comment: withContext(commentCommand),
+  upload: withContext(uploadCommand),
   chat: withContext(chatCommand),
   people: withContext(peopleCommand),
   search: withContext(searchCommand),

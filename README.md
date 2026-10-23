@@ -24,7 +24,7 @@ Same success rate with 35% fewer input tokens, 43% lower cost, and 43% less wall
 | **basecamp-axi** | 9/11    | **83,967**       | **$0.028**    | **8.1s**     | **4**     |
 | basecamp CLI     | 10/11   | 125,552          | $0.047        | 11.3s        | 5         |
 
-On the nine writes both tools support, both passed every task, and basecamp-axi used 36% fewer input tokens, cost 44% less, and finished 29% faster. Repeating a task was the widest gap: neither agent created a duplicate, but the CLI agent took 17 turns and the basecamp-axi agent took 7. The two basecamp-axi failures are missing commands: it cannot create subtasks or upload files yet. The raw CLI agent did not find native subtasks either. In the safety probes, the raw CLI trashed an item at once without confirmation; basecamp-axi treated the same request as a dry run until `--confirm` was added. Full write-up: [`bench/published-results/write/STUDY.md`](bench/published-results/write/STUDY.md).
+On the nine writes both tools support, both passed every task, and basecamp-axi used 36% fewer input tokens, cost 44% less, and finished 29% faster. Repeating a task was the widest gap: neither agent created a duplicate, but the CLI agent took 17 turns and the basecamp-axi agent took 7. The two basecamp-axi failures exposed commands that were missing at benchmark time: creating subtasks and uploading files. The raw CLI agent did not find native subtasks either. In the safety probes, the raw CLI trashed an item at once without confirmation; basecamp-axi treated the same request as a dry run until `--confirm` was added. Full write-up: [`bench/published-results/write/STUDY.md`](bench/published-results/write/STUDY.md).
 
 ## Quick start
 
@@ -56,6 +56,7 @@ basecamp-axi todo list --in 48189809 --assignee me    # project-scoped
 basecamp-axi todo view 10170015169                    # description preview; --full for everything
 basecamp-axi todo create "Ship it" --in 48189809 --to me --due tomorrow
 basecamp-axi todo done 10170015169                    # idempotent
+basecamp-axi subtask create 10170015169 "Order cake"
 basecamp-axi todolist list --in 48189809
 basecamp-axi card list --in 44361766 --column Triage
 basecamp-axi card move 10247705680 --to Done --card-table 9407211666 --in 44361766
@@ -64,6 +65,7 @@ basecamp-axi message create "Status" --body-file notes.md --in 48189809
 basecamp-axi comment list 10126503472 --in 48189809
 basecamp-axi people view 50519852                     # prints a ready-to-paste [@Jay Park](mention:<sgid>) handle
 basecamp-axi comment create 10126503472 "Thanks [@Jay Park](mention:<sgid>)" --in 48189809
+basecamp-axi upload ./site-plan.pdf --in 48189809     # project Docs & Files root
 basecamp-axi chat post "Deployed" --in 48189809 --campfire 9169930018
 basecamp-axi people list --in 48189809 --fields email,sgid
 basecamp-axi search "pull sheet"
@@ -86,22 +88,24 @@ Cross-project commands need no scope: `project list`, `report`, `search`, `peopl
 
 ### Commands
 
-| Command    | Description                                                        |
-| ---------- | ------------------------------------------------------------------ |
-| `project`  | list, view                                                         |
-| `todo`     | list, view, create, done, reopen, assign, unassign                 |
-| `todolist` | list, create                                                       |
-| `card`     | list, columns, view, create, update, move                          |
-| `message`  | list, view, create                                                 |
-| `comment`  | list, create (flat: always on the parent recording)                |
-| `chat`     | list, messages, post                                               |
-| `people`   | list, view, me                                                     |
-| `search`   | full-text search across the account                                |
-| `report`   | assigned, overdue (cross-project)                                  |
-| `recording`| list by type and status; trash, archive, restore (require `--confirm`) |
-| `url`      | parse a Basecamp link into project, recording, and comment ids     |
-| `setup`    | install agent session hooks                                        |
-| `update`   | built-in self-update inherited from `axi-sdk-js`                   |
+| Command     | Description                                                            |
+| ----------- | ---------------------------------------------------------------------- |
+| `project`   | list, view                                                             |
+| `todo`      | list, view, create, done, reopen, assign, unassign                     |
+| `subtask`   | create one checklist item under a todo or card                         |
+| `todolist`  | list, create                                                           |
+| `card`      | list, columns, view, create, update, move                              |
+| `message`   | list, view, create                                                     |
+| `comment`   | list, create (flat: always on the parent recording)                    |
+| `upload`    | upload one file to the project's Docs & Files root                     |
+| `chat`      | list, messages, post                                                   |
+| `people`    | list, view, me                                                         |
+| `search`    | full-text search across the account                                    |
+| `report`    | assigned, overdue (cross-project)                                      |
+| `recording` | list by type and status; trash, archive, restore (require `--confirm`) |
+| `url`       | parse a Basecamp link into project, recording, and comment ids         |
+| `setup`     | install agent session hooks                                            |
+| `update`    | built-in self-update inherited from `axi-sdk-js`                       |
 
 ### Behaviour
 
@@ -116,7 +120,7 @@ Cross-project commands need no scope: `project list`, `report`, `search`, `peopl
 
 ### Compatibility with the basecamp CLI
 
-Tested against basecamp CLI 0.11.0 (also exercised on 0.4.0). basecamp-axi calls only long-form subcommands (`todos create`, `comments create`, and so on), so it works whether or not a version ships the short aliases. Flags the installed version lacks surface as `DEPENDENCY_OUTDATED` with a hint to upgrade. `card update` re-sends the current due date because older CLIs otherwise clear it.
+Tested against basecamp CLI 0.11.0 (also exercised on 0.4.0). basecamp-axi calls only long-form subcommands (`todos create`, `comments create`, and so on), so it works whether or not a version ships the short aliases. Flags or commands the installed version lacks surface as `DEPENDENCY_OUTDATED` with a hint to upgrade; `subtask` needs a CLI with the `subtasks` command (tested on 0.17.0). `card update` re-sends the current due date because older CLIs otherwise clear it.
 
 ## Benchmark
 
