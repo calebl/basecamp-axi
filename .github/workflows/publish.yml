@@ -1,0 +1,46 @@
+name: Publish
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to stage for publishing (for example 0.2.0)
+        required: true
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'release' && github.event.release.tag_name || inputs.tag }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ env.RELEASE_TAG }}
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          registry-url: https://registry.npmjs.org
+          cache: npm
+      - name: Check release version
+        run: |
+          version=$(node -p "require('./package.json').version")
+          tag="${RELEASE_TAG#v}"
+          test "$version" = "$tag" || { echo "package.json version $version does not match release tag $RELEASE_TAG"; exit 1; }
+      - name: Install dependencies
+        run: npm ci
+      - name: Update npm for trusted publishing
+        run: npm install --global npm@11
+      - name: Run tests
+        run: npm test
+      - name: Stage publish
+        # prepublishOnly builds the package and its skill
+        run: npm stage publish
