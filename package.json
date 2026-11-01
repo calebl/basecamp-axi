@@ -23,7 +23,7 @@
     "build": "tsc",
     "build:skill": "node dist/scripts/build-skill.js",
     "check:skill": "node dist/scripts/build-skill.js --check",
-    "test": "npm run build && node --test dist/test/",
+    "test": "npm run build && node --test \"dist/test/*.test.js\"",
     "prepublishOnly": "npm run build && npm run build:skill"
   },
   "license": "MIT",
