@@ -56,7 +56,7 @@ basecamp-axi todo list --in 48189809 --assignee me    # project-scoped
 basecamp-axi todo view 10170015169                    # description preview; --full for everything
 basecamp-axi todo create "Ship it" --in 48189809 --to me --due tomorrow
 basecamp-axi todo done 10170015169                    # idempotent
-basecamp-axi subtask create 10170015169 "Order cake"
+basecamp-axi subtask create 10170015169 "Book venue" "Order cake"   # several titles in one call
 basecamp-axi todolist list --in 48189809
 basecamp-axi card list --in 44361766 --column Triage
 basecamp-axi card move 10247705680 --to Done --card-table 9407211666 --in 44361766
@@ -99,7 +99,7 @@ Cross-project commands need no scope: `project list`, `report`, `timesheet repor
 | ----------- | ---------------------------------------------------------------------- |
 | `project`   | list, view                                                             |
 | `todo`      | list, view, create, done, reopen, assign, unassign                     |
-| `subtask`   | create one checklist item under a todo or card                         |
+| `subtask`   | create checklist items under a todo or card (several titles per call)  |
 | `todolist`  | list, create                                                           |
 | `card`      | list, columns, view, create, update, move                              |
 | `message`   | list, view, create                                                     |

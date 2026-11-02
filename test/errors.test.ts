@@ -28,3 +28,11 @@ test("unknown subcommand from the wrapped CLI names its parent command", () => {
   assert.equal(e.code, "DEPENDENCY_OUTDATED");
   assert.match(e.message, /`hillcharts updates`/);
 });
+
+test("an in-the-trash refusal from the wrapped CLI maps to TRASHED with a restore hint", () => {
+  const e = mapBasecampError({ error: "Failed to comment on items 10467046619: This to-do is in the trash, so you can't comment on it.", code: "validation" }, 7);
+  assert.equal(e.code, "TRASHED");
+  assert.equal(e.message, "To-do 10467046619 is in the trash");
+  assert.match(e.suggestions.join("\n"), /rather than recreating it/);
+  assert.match(e.suggestions.join("\n"), /recording restore 10467046619/);
+});

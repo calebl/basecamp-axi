@@ -3,21 +3,88 @@ import assert from "node:assert/strict";
 import { humanSize } from "../src/commands/upload.js";
 import { run, verbs } from "./fake-basecamp.js";
 
-test("subtask create creates one title without pre-listing", () => {
+const activeTodo = { ok: true, data: { id: 123, type: "Todo", status: "active", bucket: { id: 99 } } };
+const trashedTodo = { ok: true, data: { id: 123, type: "Todo", status: "trashed", title: "Pay hosting bill", content: "Pay hosting bill", completed: false, bucket: { id: 99 } } };
+
+test("subtask create creates one title after checking the parent without pre-listing", () => {
   const { stdout, status, calls } = run(["subtask", "create", "123", "Book venue"], {
+    "show 123": activeTodo,
     "subtasks create": { ok: true, data: { id: 2, title: "Book venue" } },
   });
   assert.equal(status, 0);
-  assert.deepEqual(calls[0]!.slice(0, 4), ["subtasks", "create", "123", "Book venue"]);
-  assert.deepEqual(verbs(calls), ["subtasks create"]);
-  assert.match(stdout, /created:/);
-  assert.match(stdout, /title: Book venue/);
+  assert.deepEqual(verbs(calls), ["show 123", "subtasks create"]);
+  assert.deepEqual(calls[1]!.slice(0, 4), ["subtasks", "create", "123", "Book venue"]);
+  assert.match(stdout, /created\[1\]/);
+  assert.match(stdout, /2,Book venue/);
 });
 
-test("subtask create rejects multiple titles before any call", () => {
-  const { status, calls } = run(["subtask", "create", "123", "Book venue", "Send invites"], {});
-  assert.equal(status, 2);
-  assert.equal(calls.length, 0);
+test("subtask create takes several titles in one call, in order", () => {
+  const titles = ["Book venue", "Send invites", "Order cake", "Hire DJ", "Buy balloons"];
+  const { stdout, status, calls } = run(["subtask", "create", "123", ...titles], {
+    "show 123": activeTodo,
+    "subtasks create": { ok: true, data: { id: 2 } },
+  });
+  assert.equal(status, 0);
+  const creates = calls.filter((c) => c[0] === "subtasks");
+  assert.deepEqual(creates.map((c) => c[3]), titles);
+  assert.match(stdout, /created\[5\]/);
+  for (const t of titles) assert.match(stdout, new RegExp(t));
+});
+
+test("subtask create on a trashed to-do fails fast with TRASHED and creates nothing", () => {
+  const { stdout, status, calls } = run(["subtask", "create", "123", "Book venue", "Send invites"], { "show 123": trashedTodo });
+  assert.equal(status, 1);
+  assert.deepEqual(verbs(calls), ["show 123"]);
+  assert.match(stdout, /To-do 123 is in the trash/);
+  assert.match(stdout, /TRASHED/);
+  assert.match(stdout, /recording restore 123 --in 99 --confirm/);
+});
+
+test("subtask create names what landed when a later title fails", () => {
+  const { stdout, status } = run(["subtask", "create", "123", "Book venue", "Send invites"], {
+    "show 123": activeTodo,
+    "subtasks create": { ok: true, data: { id: 2, title: "Book venue" } },
+    "subtasks create 123 Send invites": { ok: false, error: "Rate limit exceeded", code: "rate_limit" },
+  });
+  assert.equal(status, 1);
+  assert.match(stdout, /Created 1 of 2 subtasks, then \\?"Send invites\\?" failed/);
+  assert.match(stdout, /subtask create 123 \\?"Send invites\\?"/);
+});
+
+test("todo done on a trashed to-do fails fast with TRASHED before any write", () => {
+  const { stdout, status, calls } = run(["todo", "done", "456", "123"], {
+    "todos show": trashedTodo,
+  });
+  assert.equal(status, 1);
+  assert.ok(!verbs(calls).includes("todos complete"), "must not call complete");
+  assert.match(stdout, /To-do 123 is in the trash/);
+});
+
+test("todo view shows a trashed to-do as trashed and offers no write hints", () => {
+  const { stdout } = run(["todo", "view", "123"], { "todos show": trashedTodo });
+  assert.match(stdout, /status: trashed/);
+  assert.doesNotMatch(stdout, /todo done 123|subtask create 123/);
+  assert.match(stdout, /recording restore 123 --in 99 --confirm/);
+});
+
+test("card move and update on a trashed card fail fast", () => {
+  const trashedCard = { ok: true, data: { id: 321, type: "Kanban::Card", status: "trashed", title: "Write tests" } };
+  const move = run(["card", "move", "321", "--to", "777", "--in", "99"], { "cards show": trashedCard });
+  assert.equal(move.status, 1);
+  assert.ok(!verbs(move.calls).includes("cards move"));
+  assert.match(move.stdout, /Card 321 is in the trash/);
+  const update = run(["card", "update", "321", "--title", "New", "--in", "99"], { "cards show": trashedCard });
+  assert.equal(update.status, 1);
+  assert.ok(!verbs(update.calls).includes("cards update"));
+});
+
+test("comment on a trashed item maps to TRASHED", () => {
+  const { stdout, status } = run(["comment", "create", "123", "probe", "--in", "99"], {
+    "comments create": { ok: false, error: "Failed to comment on items 123: This to-do is in the trash, so you can't comment on it.", code: "validation" },
+  });
+  assert.equal(status, 1);
+  assert.match(stdout, /To-do 123 is in the trash/);
+  assert.match(stdout, /TRASHED/);
 });
 
 test("subtask create reports --assignees as unknown without suggesting --to", () => {
@@ -43,9 +110,12 @@ test("todo create rejects the removed --subtask alias before any call", () => {
   assert.equal(calls.length, 0);
 });
 
-test("todo view points at subtasks", () => {
+test("todo view and todo create point at one multi-title subtask call", () => {
   const { stdout } = run(["todo", "view", "777"], { "todos show": { ok: true, data: { id: 777, content: "Plan", bucket: { id: 99 } } } });
-  assert.match(stdout, /subtask create 777/);
+  assert.match(stdout, /subtask create 777 \\?"<title>\\?" \\?"<title>\\?" \.\.\..*all titles in one call/);
+  const created = run(["todo", "create", "Plan", "--in", "99"], { "todos create": { ok: true, data: { id: 778, content: "Plan" } } });
+  assert.equal(created.status, 0);
+  assert.match(created.stdout, /subtask create 778 \\?"<title>\\?" \\?"<title>\\?" \.\.\..*all titles in one call/);
 });
 
 test("upload always sends the file to Docs & Files", () => {

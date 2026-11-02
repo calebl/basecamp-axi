@@ -57,7 +57,8 @@ Run \`npx -y basecamp-axi --help\` for global flags, or \`npx -y basecamp-axi <c
 
 - Output is TOON-encoded and token-efficient; pipe through grep/head only when a list is very long.
 - \`todo done\` and \`todo reopen\` are idempotent: an already-done todo reports \`already done (no-op)\` with exit 0.
-- Subtasks are real checklist items under a todo or card, not separate todos. Create one with \`subtask create <todo|card id> "Title"\`.
+- Subtasks are real checklist items under a todo or card, not separate todos. Create several in one call: \`subtask create <todo|card id> "Book venue" "Send invites" "Order cake"\` - never loop over titles.
+- A \`TRASHED\` error means someone put the item in the trash. Stop and tell the user; do not recreate it, and restore it with \`recording restore\` only if they ask. Basecamp silently ignores some writes on trashed items, so basecamp-axi checks first.
 - \`upload <file> --in <project>\` puts one file in the project's Docs & Files root.
 - Message bodies and comment text accept Markdown. Mention people with \`[@Name](mention:<sgid>)\`; \`people view <id>\` prints the exact handle and \`people list --fields sgid\` adds the sgid column. The \`person:<id>\` form is not reliable.
 - For multi-line text, write it to a UTF-8 file and pass \`--body-file <path>\` (messages, comments) or \`--description-file <path>\` (todos).
