@@ -51,7 +51,7 @@ const sandbox: Sandbox = {
 };
 
 test("sandbox hill reads and reset accept every untouched-chart response", () => {
-  for (const message of ["resource not found", "No todolists to track on the hill chart", "Forbidden"]) {
+  for (const message of ["resource not found", "No todolists to track on the hill chart"]) {
     withFakeBasecamp(message, () => {
       const reader = sandboxReader(sandbox);
       assert.deepEqual(reader.hillDots(), []);
@@ -62,9 +62,12 @@ test("sandbox hill reads and reset accept every untouched-chart response", () =>
 });
 
 test("sandbox hill reads preserve genuine access denial", () => {
-  withFakeBasecamp("access denied", () => {
-    assert.throws(() => sandboxReader(sandbox).hillDots(), /access denied/i);
-    assert.throws(() => sandboxReader(sandbox).hillUpdates(), /access denied/i);
-    assert.throws(() => resetSandbox(sandbox), /access denied/i);
-  });
+  for (const message of ["Forbidden", "access denied"]) {
+    withFakeBasecamp(message, () => {
+      const expected = new RegExp(message, "i");
+      assert.throws(() => sandboxReader(sandbox).hillDots(), expected);
+      assert.throws(() => sandboxReader(sandbox).hillUpdates(), expected);
+      assert.throws(() => resetSandbox(sandbox), expected);
+    });
+  }
 });

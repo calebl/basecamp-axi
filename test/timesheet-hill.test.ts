@@ -40,6 +40,13 @@ test("timesheet list without a project is a usage error before any call", () => 
   assert.equal(calls.length, 0);
 });
 
+test("timesheet help limits --item to numeric ids", () => {
+  const { stdout, status, calls } = run(["timesheet", "--help"], {});
+  assert.equal(status, 0);
+  assert.equal(calls.length, 0);
+  assert.match(stdout, /--item <id>\s+Only entries on one item/);
+});
+
 test("timesheet list --item reads one item and prints a definitive empty state", () => {
   const { stdout, status, calls } = run(["timesheet", "list", "--item", "777"], { "timesheet item": { ok: true, data: [] } });
   assert.equal(status, 0);
@@ -47,11 +54,13 @@ test("timesheet list --item reads one item and prints a definitive empty state",
   assert.match(stdout, /entries: 0 timesheet entries on item 777/);
 });
 
-test("timesheet list --item extracts the recording id from a Basecamp URL", () => {
+test("timesheet list --item rejects URLs before any call", () => {
   const url = "https://3.basecamp.com/123/buckets/99/todos/777";
-  const { status, calls } = run(["timesheet", "list", "--item", url], { "timesheet item": { ok: true, data: [] } });
-  assert.equal(status, 0);
-  assert.deepEqual(calls[0]!.slice(0, 3), ["timesheet", "item", "777"]);
+  const { stdout, status, calls } = run(["timesheet", "list", "--item", url], {});
+  assert.equal(status, 2);
+  assert.equal(calls.length, 0);
+  assert.match(stdout, /--item takes a numeric item id/);
+  assert.match(stdout, /url parse <url>/);
 });
 
 test("timesheet report passes the range as --start/--end and does not forward the project", () => {
@@ -83,6 +92,18 @@ test("timesheet create forwards the entry flags", () => {
   assert.match(stdout, /timesheet delete 1069480283 --confirm/);
 });
 
+test("timesheet create from an item URL hints with the created entry URL", () => {
+  const itemUrl = "https://3.basecamp.com/123/buckets/99/todos/777";
+  const entryUrl = "https://3.basecamp.com/123/buckets/99/timesheet_entries/1069480283";
+  const { stdout, status } = run(["timesheet", "create", itemUrl, "--hours", "1"], {
+    "--version": VERSION,
+    "timesheet entry create": { ok: true, data: { ...ENTRY, app_url: entryUrl } },
+  });
+  assert.equal(status, 0);
+  assert.ok(stdout.includes(`timesheet update ${entryUrl} --hours`));
+  assert.ok(stdout.includes(`timesheet delete ${entryUrl} --confirm`));
+});
+
 test("timesheet create requires valid --hours before any call", () => {
   for (const args of [["timesheet", "create", "777"], ["timesheet", "create", "777", "--hours", "lots"]]) {
     const { status, calls } = run(args, {});
@@ -100,6 +121,18 @@ test("timesheet entry commands refuse an older basecamp CLI before calling it", 
   assert.deepEqual(kinds(calls), []);
 });
 
+test("timesheet view preserves an entry URL in follow-up hints", () => {
+  const url = "https://3.basecamp.com/123/buckets/99/timesheet_entries/1069480283";
+  const { stdout, status, calls } = run(["timesheet", "view", url], {
+    "--version": VERSION,
+    "timesheet entry show": { ok: true, data: ENTRY },
+  });
+  assert.equal(status, 0);
+  assert.deepEqual(calls.find((c) => c[2] === "show")!.slice(0, 4), ["timesheet", "entry", "show", url]);
+  assert.ok(stdout.includes(`timesheet update ${url} --hours`));
+  assert.ok(stdout.includes(`timesheet delete ${url} --confirm`));
+});
+
 test("timesheet update is a no-op when nothing would change", () => {
   const { stdout, status, calls } = run(["timesheet", "update", "1069480283", "--hours", "1:00", "--person", "Ann"], {
     "--version": VERSION,
@@ -110,15 +143,17 @@ test("timesheet update is a no-op when nothing would change", () => {
   assert.deepEqual(kinds(calls), ["timesheet entry show"]);
 });
 
-test("timesheet update sends only the changed flags", () => {
-  const { stdout, status, calls } = run(["timesheet", "update", "1069480283", "--hours", "2.5"], {
+test("timesheet update sends only the changed flags and preserves an entry URL", () => {
+  const url = "https://3.basecamp.com/123/buckets/99/timesheet_entries/1069480283";
+  const { stdout, status, calls } = run(["timesheet", "update", url, "--hours", "2.5"], {
     "--version": VERSION,
     "timesheet entry show": { ok: true, data: ENTRY },
     "timesheet entry update": { ok: true, data: { ...ENTRY, hours: "2.5" } },
   });
   assert.equal(status, 0);
   assert.deepEqual(kinds(calls), ["timesheet entry show", "timesheet entry update"]);
-  assert.deepEqual(calls.find((c) => c[2] === "update")!.slice(0, 6), ["timesheet", "entry", "update", "1069480283", "--hours", "2.5"]);
+  assert.deepEqual(calls.find((c) => c[2] === "update")!.slice(0, 6), ["timesheet", "entry", "update", url, "--hours", "2.5"]);
+  assert.ok(stdout.includes(`timesheet delete ${url} --confirm`));
   assert.match(stdout, /updated:/);
 });
 
@@ -149,6 +184,18 @@ test("timesheet delete --confirm deletes with --force", () => {
   const del = calls.find((c) => c[2] === "delete")!;
   assert.deepEqual(del.slice(0, 5), ["timesheet", "entry", "delete", "1069480283", "--force"]);
   assert.match(stdout, /deleted/);
+});
+
+test("timesheet delete preserves an entry URL for the permanent call", () => {
+  const url = "https://3.basecamp.com/123/buckets/99/timesheet_entries/1069480283";
+  const { status, calls } = run(["timesheet", "delete", url, "--confirm"], {
+    "--version": VERSION,
+    "timesheet entry show": { ok: true, data: ENTRY },
+    "timesheet entry delete": { ok: true, data: { id: 1069480283, deleted: true } },
+  });
+  assert.equal(status, 0);
+  assert.deepEqual(calls.find((c) => c[2] === "show")!.slice(0, 4), ["timesheet", "entry", "show", url]);
+  assert.deepEqual(calls.find((c) => c[2] === "delete")!.slice(0, 5), ["timesheet", "entry", "delete", url, "--force"]);
 });
 
 test("timesheet delete of a missing entry fails before deleting anything", () => {

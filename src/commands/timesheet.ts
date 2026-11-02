@@ -10,7 +10,7 @@ export const TIMESHEET_HELP = `usage: basecamp-axi timesheet <list|report|view|c
 Time logged against to-dos, messages, cards, documents, uploads, or schedule entries.
 subcommands:
   list                              Entries in the project (needs --in), newest first
-    --item <id|url>                 Only entries on one item (no --in needed)
+    --item <id>                     Only entries on one item (no --in needed)
     --limit <n>                     Default 50
   report                            Account-wide entries (default: the last month; ignores --in)
     --from <date> --to <date>       ISO 8601 range; pass both or neither
@@ -130,23 +130,18 @@ function renderEntries(entries: Row[], limit: number, empty: string, hints: stri
   ]);
 }
 
-function recordingId(ref: string): string {
-  if (!/^https?:\/\//i.test(ref)) return ref;
-  try {
-    const ids = new URL(ref).pathname.split("/").filter((part) => /^\d+$/.test(part));
-    return ids.at(-1) ?? ref;
-  } catch {
-    return ref;
-  }
-}
-
 async function list(args: string[], ctx: CliContext | undefined): Promise<string> {
   const parsed = parseArgs(args, LIST_FLAGS, { command: "timesheet list" });
   const limit = int(parsed, "--limit", 50);
   const item = str(parsed, "--item");
   const pf = projectFlag(ctx);
   if (item) {
-    const result = await ts(["item", recordingId(item)], { project: ctx?.project, account: ctx?.account });
+    if (!/^\d+$/.test(item)) {
+      throw new AxiError("--item takes a numeric item id", "VALIDATION_ERROR", [
+        "Run `basecamp-axi url parse <url>` to get the recording id from a Basecamp link",
+      ]);
+    }
+    const result = await ts(["item", item], { project: ctx?.project, account: ctx?.account });
     return renderEntries(asList<Row>(result.data), limit, `timesheet entries on item ${item}`, [
       `Run \`basecamp-axi timesheet create ${item} --hours <h>\` to log time on it`,
     ]);
@@ -204,11 +199,12 @@ function detailSchema(): Schema {
   };
 }
 
-function entryHints(e: Row): string[] {
-  if (!e.id) return [];
+function entryHints(e: Row, ref?: string): string[] {
+  const target = ref ?? e.app_url ?? e.id;
+  if (!target) return [];
   return [
-    `Run \`basecamp-axi timesheet update ${e.id} --hours <h>\` to change it`,
-    `Run \`basecamp-axi timesheet delete ${e.id} --confirm\` to delete it permanently`,
+    `Run \`basecamp-axi timesheet update ${target} --hours <h>\` to change it`,
+    `Run \`basecamp-axi timesheet delete ${target} --confirm\` to delete it permanently`,
   ];
 }
 
@@ -217,7 +213,7 @@ async function view(args: string[], ctx: CliContext | undefined): Promise<string
   const id = requirePositional(parsed, 0, "entry id|url", "basecamp-axi timesheet view <entry id|url>");
   await requireCliVersion(ENTRY_MIN_CLI, "timesheet view");
   const e = await show(id, ctx);
-  return renderOutput([renderDetail("entry", e, detailSchema()), renderHelp(entryHints(e))]);
+  return renderOutput([renderDetail("entry", e, detailSchema()), renderHelp(entryHints(e, id))]);
 }
 
 function entryArgs(parsed: ReturnType<typeof parseArgs>): string[] {
@@ -281,7 +277,7 @@ async function update(args: string[], ctx: CliContext | undefined): Promise<stri
   if (entryUnchanged(before, parsed)) {
     return renderOutput([
       renderDetail("entry", { ...before, result: "unchanged (no-op)" }, { id: (x) => x.id, date: (x) => x.date, hours: (x) => x.hours, person: (x) => x.person?.name, result: (x) => x.result }),
-      renderHelp(entryHints(before)),
+      renderHelp(entryHints(before, id)),
     ]);
   }
   const result = await ts<Row>(["entry", "update", id, ...changes], { project: ctx?.project, account: ctx?.account });
@@ -295,7 +291,7 @@ async function update(args: string[], ctx: CliContext | undefined): Promise<stri
       item: (x) => itemLabel(x),
       description: (x) => x.description,
     }),
-    renderHelp(entryHints(e)),
+    renderHelp(entryHints(e, id)),
   ]);
 }
 
@@ -331,7 +327,7 @@ async function remove(args: string[], ctx: CliContext | undefined): Promise<stri
 
   const rows: Row[] = [];
   for (const e of entries) {
-    await ts(["entry", "delete", String(e.id ?? e.ref), "--force"], { project: ctx?.project, account: ctx?.account });
+    await ts(["entry", "delete", String(e.ref), "--force"], { project: ctx?.project, account: ctx?.account });
     rows.push({ ...e, result: "deleted" });
   }
   return renderOutput([

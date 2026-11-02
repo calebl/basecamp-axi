@@ -147,8 +147,8 @@ function orEmpty(read: () => unknown, pattern: RegExp): Json[] {
 
 /** Timesheet listings fail with "access denied" when the account has Timesheet turned off. */
 const NO_TIMESHEET = /access denied/i;
-/** An untouched hill may read as missing, disabled, or forbidden by the underlying API. */
-const NO_HILL = /not found|no todolists to track on the hill chart|failed: forbidden$/i;
+/** An untouched hill may read as missing or disabled. */
+const NO_HILL = /not found|no todolists to track on the hill chart/i;
 
 /**
  * Delete every timesheet entry and trash every hill chart progress update, then trash every to-do
