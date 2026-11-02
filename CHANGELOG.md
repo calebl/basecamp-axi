@@ -1,12 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- `subtask create` takes several titles in one call and creates them in order. If one fails, the error names the subtasks already created and the command that adds the rest. The hints after `todo create` and `todo view` show the one-call form.
+- Acting on a trashed item fails fast with a `TRASHED` error and a restore hint, and changes nothing. This covers `todo done|reopen`, `subtask create`, `card move|update`, and `comment create`. Basecamp itself reports success for some of these writes without applying them: a completed trashed to-do stays open, and a moved trashed card is restored to the board. `todo view` shows a trashed to-do's status as `trashed`.
+
 ## 0.2.0
 
 ### Added
 
-- `subtask list|create|done|reopen` for to-do subtasks. `create` takes several titles in one call and skips titles the parent already has; `done` and `reopen` are idempotent. `todo create --subtask` creates subtasks inline.
-- `upload <file>` and `upload list` for Docs & Files. Re-uploading a same-name, same-size file is a no-op; a same-name file with different content is a `CONFLICT` unless `--force`.
-- `--attach <path>` (repeatable) on `todo create`, `message create`, and `comment create`.
+- `subtask create` adds one subtask to a to-do or card.
+- `upload <file>` uploads one file to the project's Docs & Files root.
 
 ### Changed
 

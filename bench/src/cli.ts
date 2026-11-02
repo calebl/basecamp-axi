@@ -43,6 +43,11 @@ function loadTasks(suite?: Suite): Map<string, TaskDef> {
   return map;
 }
 
+/** Ids of tasks marked `coverage: true`, labelled as such in reports. */
+function coverageTasks(): Set<string> {
+  return new Set([...loadTasks().values()].filter((t) => t.coverage).map((t) => t.id));
+}
+
 function loadSandboxDef(): SandboxDef {
   return parseYaml(readFileSync(join(CONFIG_DIR, "sandbox.yaml"), "utf-8")) as SandboxDef;
 }
@@ -244,7 +249,7 @@ async function cmdMatrix(argv: string[]): Promise<void> {
     }
 
     console.log(`\nWrite matrix ${stopped ? "stopped at budget" : "complete"}: $${spent.toFixed(2)} spent.`);
-    writeReports(suite);
+    writeReports(suite, coverageTasks());
     return;
   }
 
@@ -316,7 +321,7 @@ async function cmdMatrix(argv: string[]): Promise<void> {
   }
 
   console.log(`\nMatrix complete: ${total} runs.`);
-  writeReports();
+  writeReports("read", coverageTasks());
 }
 
 async function cmdSandbox(argv: string[]): Promise<void> {
@@ -336,7 +341,7 @@ async function main(): Promise<void> {
     case "matrix":
       return cmdMatrix(rest);
     case "report":
-      writeReports((parseArgs(rest).suite ?? "read") as Suite);
+      writeReports((parseArgs(rest).suite ?? "read") as Suite, coverageTasks());
       return;
     case "sandbox":
       return cmdSandbox(rest);

@@ -15,6 +15,8 @@ export interface Sandbox {
   def: SandboxDef;
   projectId: string;
   cardTableId: string;
+  /** Extra card tables from sandbox.yaml, title → id. */
+  cardTables?: Map<string, string>;
   campfireId: string;
   /** Email of the authenticated person; "me" in prompts. */
   meEmail: string;
@@ -22,9 +24,12 @@ export interface Sandbox {
 
 // Normalised shapes the write grader reads. Kept flat so checks can be unit-tested.
 export interface TodoItem { id: string; title: string; completed: boolean; assignees: string[]; due_on: string | null }
+export interface RecordingState { id: string; status: string; completed: boolean; updated_at: string }
 export interface SubtaskItem { id: string; title: string; completed: boolean }
+/** `text` is the comment's raw HTML, so checks can see lists and attachments. */
 export interface CommentItem { id: string; text: string }
-export interface CardItem { id: string; title: string; column: string }
+export interface CardItem { id: string; title: string; column: string; body: string }
+export interface CheckinAnswerItem { id: string; question: string; text: string; creator: string; date: string }
 export interface MessageItem { id: string; title: string; body: string }
 export interface UploadItem { id: string; filename: string }
 export interface TimesheetItem { id: string; hours: string; date: string; description: string; item_id: string; item_title: string }
@@ -35,9 +40,12 @@ export interface BasecampReader {
   meEmail(): string;
   todolists(): { id: string; name: string }[];
   todos(listId: string): TodoItem[];
+  recording(id: string): RecordingState;
   subtasks(todoId: string): SubtaskItem[];
   comments(recordingId: string): CommentItem[];
-  cards(): CardItem[];
+  /** Cards on one table: the default table when `table` is omitted or "default", else an extra table by title. */
+  cards(table?: string): CardItem[];
+  checkinAnswers(): CheckinAnswerItem[];
   messages(): MessageItem[];
   chatLines(): CommentItem[];
   uploads(): UploadItem[];
@@ -107,21 +115,51 @@ export function openSandbox(def: SandboxDef, opts: { create: boolean }): Sandbox
     if (!t.enabled) bc(def, ["tools", "enable", String(t.id), "--in", projectId]);
     return t;
   };
-  const cardTableId = String(tool("kanban_board").id);
+  const extraNames = new Set((def.card_tables ?? []).map((t) => t.name));
+  const boards = dock.filter((d) => d.name === "kanban_board");
+  const mainBoards = boards.filter((d) => !extraNames.has(String(d.title)));
+  const defaultBoard = mainBoards.find((d) => d.enabled) ?? mainBoards[0];
+  if (!defaultBoard) throw new Error("Sandbox project has no kanban_board tool.");
+  if (!defaultBoard.enabled) bc(def, ["tools", "enable", String(defaultBoard.id), "--in", projectId]);
+  const cardTableId = String(defaultBoard.id);
   const campfireId = String(tool("chat").id);
   tool("todoset");
   tool("message_board");
   tool("vault");
+  tool("questionnaire");
 
-  const columns = list(bc(def, ["cards", "columns", "--in", projectId, "--card-table", cardTableId]));
-  for (const want of def.columns) {
-    if (!columns.some((c) => c.title === want)) {
-      bc(def, ["cards", "column", "create", want, "--in", projectId, "--card-table", cardTableId]);
+  const ensureColumns = (tableId: string, wanted: string[]): void => {
+    const columns = list(bc(def, ["cards", "columns", "--in", projectId, "--card-table", tableId]));
+    for (const want of wanted) {
+      if (!columns.some((c) => c.title === want)) {
+        bc(def, ["cards", "column", "create", want, "--in", projectId, "--card-table", tableId]);
+      }
     }
+  };
+  ensureColumns(cardTableId, def.columns);
+
+  // Extra card tables stay in the project between runs: Basecamp keeps a removed table in the dock
+  // for days, and the basecamp CLI counts it, so creating one per task would leak into later tasks.
+  const cardTables = new Map<string, string>();
+  for (const extra of def.card_tables ?? []) {
+    const live = boards.find((d) => d.title === extra.name && d.enabled);
+    const id = live
+      ? String(live.id)
+      : String((bc(def, ["tools", "create", extra.name, "--type", "kanban_board", "--in", projectId]) as Json).id);
+    ensureColumns(id, extra.columns);
+    cardTables.set(extra.name, id);
   }
 
   const me = bc(def, ["me"]) as Json;
-  return { def, projectId, cardTableId, campfireId, meEmail: String(me.identity?.email_address ?? "") };
+  return { def, projectId, cardTableId, cardTables, campfireId, meEmail: String(me.identity?.email_address ?? "") };
+}
+
+/** Card table id by title; omitted or "default" is the project's main table. */
+export function cardTableId(sb: Sandbox, table?: string): string {
+  if (!table || table === "default") return sb.cardTableId;
+  const id = sb.cardTables?.get(table);
+  if (!id) throw new Error(`No card table "${table}" in the sandbox; add it to card_tables in sandbox.yaml.`);
+  return id;
 }
 
 function inProject(sb: Sandbox, rec: Json): boolean {
@@ -149,6 +187,8 @@ function orEmpty(read: () => unknown, pattern: RegExp): Json[] {
 const NO_TIMESHEET = /access denied/i;
 /** An untouched hill may read as missing or disabled. */
 const NO_HILL = /not found|no todolists to track on the hill chart/i;
+/** A project whose Check-ins tool is off has no questionnaire to list. */
+const NO_CHECKINS = /questionnaire not found/i;
 
 /**
  * Delete every timesheet entry and trash every hill chart progress update, then trash every to-do
@@ -173,6 +213,12 @@ export function resetSandbox(sb: Sandbox): number {
     bc(def, ["todolists", "trash", String(tl.id), "--in", p]);
     removed++;
   }
+  // Trashing a check-in question takes its answers with it.
+  for (const q of orEmpty(() => bc(def, ["checkins", "questions", "--in", p]), NO_CHECKINS)) {
+    guard(sb, q);
+    bc(def, ["recordings", "trash", String(q.id), "--in", p]);
+    removed++;
+  }
   for (const type of ["todos", "messages", "cards", "documents", "uploads"]) {
     for (const rec of list(bc(def, ["recordings", "list", type, "--in", p, "--all"]))) {
       guard(sb, rec);
@@ -188,7 +234,10 @@ export function resetSandbox(sb: Sandbox): number {
   return removed;
 }
 
-/** Create the task's starting content. Returns ids by title for probes. */
+/**
+ * Create the task's starting content. Returns ids keyed by title (for probes and later seed steps)
+ * and by "List/Title" for to-dos, plus each to-do's web link under "url:List/Title" for prompt templates.
+ */
 export function seedSandbox(sb: Sandbox, seed: SeedSpec | undefined): Map<string, string> {
   const ids = new Map<string, string>();
   if (!seed) return ids;
@@ -196,16 +245,38 @@ export function seedSandbox(sb: Sandbox, seed: SeedSpec | undefined): Map<string
   for (const tl of seed.todolists ?? []) {
     const created = bc(def, ["todolists", "create", tl.name, "--in", p]) as Json;
     ids.set(tl.name, String(created.id));
-    for (const title of tl.todos ?? []) {
-      const todo = bc(def, ["todos", "create", title, "--list", String(created.id), "--in", p]) as Json;
-      ids.set(title, String(todo.id));
+    const toTrash: string[] = [];
+    for (const entry of tl.todos ?? []) {
+      const t = typeof entry === "string" ? { title: entry } : entry;
+      const todo = bc(def, ["todos", "create", t.title, "--list", String(created.id), "--in", p]) as Json;
+      const id = String(todo.id);
+      ids.set(t.title, id);
+      ids.set(`${tl.name}/${t.title}`, id);
+      ids.set(`url:${tl.name}/${t.title}`, String(todo.app_url ?? ""));
+      for (const text of t.subtasks ?? []) bc(def, ["subtasks", "create", id, text]);
+      for (const text of t.comments ?? []) bc(def, ["comments", "create", id, text, "--in", p]);
+      if (t.trashed) toTrash.push(id);
     }
+    for (const id of toTrash) bc(def, ["todos", "trash", id, "--in", p]);
   }
   for (const card of seed.cards ?? []) {
     const created = bc(def, [
       "cards", "create", card.title, "--column", card.column, "--card-table", sb.cardTableId, "--in", p,
     ]) as Json;
     ids.set(card.title, String(created.id));
+  }
+  for (const table of seed.card_tables ?? []) {
+    const tableId = cardTableId(sb, table.name);
+    for (const card of table.cards) {
+      const created = bc(def, [
+        "cards", "create", card.title, "--column", card.column, "--card-table", tableId, "--in", p,
+      ]) as Json;
+      ids.set(`${table.name}/${card.title}`, String(created.id));
+    }
+  }
+  for (const checkin of seed.checkins ?? []) {
+    const created = bc(def, ["checkins", "question", "create", checkin.question, "--in", p]) as Json;
+    ids.set(checkin.question, String(created.id));
   }
   for (const msg of seed.messages ?? []) {
     const args = ["messages", "create", msg.title];
@@ -232,6 +303,17 @@ export function seedSandbox(sb: Sandbox, seed: SeedSpec | undefined): Map<string
   return ids;
 }
 
+function readRecordingState(sb: Sandbox, id: string): RecordingState {
+  const rec = bc(sb.def, ["show", id, "--in", sb.projectId]) as Json;
+  guard(sb, rec);
+  return {
+    id: String(rec.id),
+    status: String(rec.status ?? "unknown"),
+    completed: Boolean(rec.completed),
+    updated_at: String(rec.updated_at ?? ""),
+  };
+}
+
 /** Live reader over the sandbox project, used by the write grader. */
 export function sandboxReader(sb: Sandbox): BasecampReader {
   const { def, projectId: p } = sb;
@@ -251,6 +333,7 @@ export function sandboxReader(sb: Sandbox): BasecampReader {
       ...list(bc(def, ["todos", "list", "--list", listId, "--in", p, "--all"])),
       ...list(bc(def, ["todos", "list", "--list", listId, "--in", p, "--all", "--completed"])),
     ].map(toTodo),
+    recording: (id) => readRecordingState(sb, id),
     subtasks: (todoId) =>
       list(bc(def, ["subtasks", "list", todoId, "--all"])).map((s) => ({
         id: String(s.id),
@@ -262,12 +345,22 @@ export function sandboxReader(sb: Sandbox): BasecampReader {
         id: String(c.id),
         text: String(c.content ?? ""),
       })),
-    cards: () =>
-      list(bc(def, ["cards", "list", "--in", p, "--card-table", sb.cardTableId, "--all"])).map((c) => ({
+    cards: (table) =>
+      list(bc(def, ["cards", "list", "--in", p, "--card-table", cardTableId(sb, table), "--all"])).map((c) => ({
         id: String(c.id),
-        title: String(c.title ?? c.content ?? ""),
+        title: String(c.title ?? ""),
         column: String(c.parent?.title ?? ""),
+        body: String(c.content ?? c.description ?? ""),
       })),
+    checkinAnswers: () =>
+      orEmpty(() => bc(def, ["checkins", "questions", "--in", p]), NO_CHECKINS).filter((q) => inProject(sb, q)).flatMap((q) =>
+        list(bc(def, ["checkins", "answers", String(q.id), "--in", p, "--all"])).map((a) => ({
+          id: String(a.id),
+          question: String(q.title ?? ""),
+          text: String(a.content ?? ""),
+          creator: String(a.creator?.email_address ?? ""),
+          date: String(a.group_on ?? ""),
+        }))),
     messages: () =>
       list(bc(def, ["messages", "list", "--in", p, "--all"])).map((m) => ({
         id: String(m.id),
@@ -305,9 +398,7 @@ export function sandboxReader(sb: Sandbox): BasecampReader {
 
 /** Status of one recording ("active", "trashed", ...), read straight from the API. */
 export function recordingStatus(sb: Sandbox, id: string): string {
-  const rec = bc(sb.def, ["show", id, "--in", sb.projectId]) as Json;
-  guard(sb, rec);
-  return String(rec.status ?? "unknown");
+  return readRecordingState(sb, id).status;
 }
 
 /** Run a probe command with the sandbox credentials; never through a shell. */

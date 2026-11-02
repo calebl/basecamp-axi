@@ -1,7 +1,7 @@
-import { bc, asList } from "../basecamp.js";
+import { bc, asList, type BasecampResult } from "../basecamp.js";
 import { parseArgs, pickSub, requirePositional, str, int, bool, type FlagSpec } from "../args.js";
 import { projectFlag, type CliContext } from "../context.js";
-import { AxiError } from "../errors.js";
+import { AxiError, trashedError } from "../errors.js";
 import { countLine, names, renderDetail, renderHelp, renderList, renderOutput, type Row } from "../toon.js";
 import { dueStatus, htmlToText, preview, relativeTime, truncate } from "../text.js";
 
@@ -154,7 +154,7 @@ async function view(args: string[], ctx: CliContext | undefined): Promise<string
   const detail = renderDetail("todo", t, {
     id: (x) => x.id,
     title: (x) => x.content,
-    status: (x) => (x.completed ? "done" : "open"),
+    status: (x) => (x.status === "trashed" || x.status === "archived" ? x.status : x.completed ? "done" : "open"),
     due: (x) => dueStatus(x.due_on),
     assignees: (x) => names(x.assignees),
     list: (x) => x.parent?.title,
@@ -173,8 +173,12 @@ async function view(args: string[], ctx: CliContext | undefined): Promise<string
     renderHelp([
       ...(desc.truncated ? [`Run \`basecamp-axi todo view ${t.id} --full\` to see the complete description`] : []),
       ...((t.comments_count ?? 0) > 0 ? [`Run \`basecamp-axi comment list ${t.id}${inProject}\` to read ${t.comments_count} comments`] : []),
-      `Run \`basecamp-axi subtask create ${t.id} "<title>"\` to add a subtask`,
-      ...(t.completed ? [`Run \`basecamp-axi todo reopen ${t.id}\` to reopen`] : [`Run \`basecamp-axi todo done ${t.id}\` to complete`]),
+      ...(t.status === "trashed"
+        ? [`This todo is in the trash; run \`basecamp-axi recording restore ${t.id}${inProject} --confirm\` only if the user wants it back`]
+        : [
+          `Run \`basecamp-axi subtask create ${t.id} "<title>" "<title>" ...\` to add subtasks, all titles in one call`,
+          ...(t.completed ? [`Run \`basecamp-axi todo reopen ${t.id}\` to reopen`] : [`Run \`basecamp-axi todo done ${t.id}\` to complete`]),
+        ]),
     ]),
   ]);
 }
@@ -205,7 +209,7 @@ async function create(args: string[], ctx: CliContext | undefined): Promise<stri
     renderHelp([
       ...(t.id ? [
         `Run \`basecamp-axi todo view ${t.id}\` to confirm`,
-        `Run \`basecamp-axi subtask create ${t.id} "<title>"\` to add a subtask`,
+        `Run \`basecamp-axi subtask create ${t.id} "<title>" "<title>" ...\` to add subtasks, all titles in one call`,
         `Run \`basecamp-axi todo done ${t.id}\` when finished`,
       ] : []),
     ]),
@@ -216,16 +220,23 @@ async function toggle(args: string[], ctx: CliContext | undefined, action: "done
   const parsed = parseArgs(args, [], { command: `todo ${action}`, maxPositionals: Infinity });
   if (parsed.positionals.length === 0) requirePositional(parsed, 0, "id|url", `basecamp-axi todo ${action} <id|url>...`);
   const ids = parsed.positionals.flatMap((p) => p.split(",")).filter(Boolean);
-  const rows: Row[] = [];
+  // Read every todo before changing any, so a trashed one stops the command before a partial write.
+  // Basecamp accepts a completion on a trashed todo and reports success without completing it.
+  const befores: { id: string; before: BasecampResult<Row> }[] = [];
   for (const id of ids) {
-    const before = await bc<Row>(["todos", "show", id], { project: ctx?.project, account: ctx?.account }).catch(() => undefined);
+    const before = await bc<Row>(["todos", "show", id], { project: ctx?.project, account: ctx?.account });
+    if (before.data.status === "trashed") throw trashedError(before.data.id ?? id, "To-do", before.data.bucket?.id);
+    befores.push({ id, before });
+  }
+  const rows: Row[] = [];
+  for (const { id, before } of befores) {
     const wantCompleted = action === "done";
-    if (before && Boolean(before.data.completed) === wantCompleted) {
+    if (Boolean(before.data.completed) === wantCompleted) {
       rows.push({ id: before.data.id, title: before.data.title ?? before.data.content, result: `already ${wantCompleted ? "done" : "open"} (no-op)` });
       continue;
     }
     await bc(["todos", action === "done" ? "complete" : "uncomplete", id], { project: ctx?.project, account: ctx?.account });
-    rows.push({ id: before?.data.id ?? numeric(id), title: before?.data.title ?? before?.data.content ?? "?", result: wantCompleted ? "completed" : "reopened" });
+    rows.push({ id: before.data.id ?? numeric(id), title: before.data.title ?? before.data.content ?? "?", result: wantCompleted ? "completed" : "reopened" });
   }
   return renderOutput([
     renderList("todos", rows, { id: (r) => r.id, title: (r) => r.title, result: (r) => r.result }),

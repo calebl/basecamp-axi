@@ -14,11 +14,35 @@ export function basecampNotInstalledError(): AxiError {
   ]);
 }
 
+/**
+ * The item is in the trash. Basecamp still shows a trashed recording, and some writes on it
+ * (completing a to-do, adding a subtask) report success without any visible effect, so commands
+ * check first and stop here instead of letting an agent retry or recreate the item.
+ */
+export function trashedError(id: string | number, label = "Item", project?: string | number): AxiError {
+  const inProject = project ? ` --in ${project}` : " --in <project>";
+  return new AxiError(`${label} ${id} is in the trash`, "TRASHED", [
+    "Someone trashed it on purpose: stop and tell the user rather than recreating it",
+    `Run \`basecamp-axi recording restore ${id}${inProject} --confirm\` only if the user wants it back`,
+  ]);
+}
+
 /** Translate a basecamp CLI failure envelope into a structured AxiError. */
 export function mapBasecampError(failure: BasecampFailure, exitCode: number): AxiError {
   const message = (failure.error ?? "").trim();
   const code = (failure.code ?? "").toLowerCase();
   const hint = failure.hint?.trim();
+
+  // e.g. "Failed to comment on items 123: This to-do is in the trash, so you can't comment on it."
+  if (/is in the trash/i.test(message)) {
+    const id = /items? (\d+)/i.exec(message)?.[1];
+    const kind = /this ([\w-]+(?: [\w-]+)?) is in the trash/i.exec(message)?.[1] ?? "item";
+    const label = kind.replace(/^\w/, (c) => c.toUpperCase());
+    if (id) return trashedError(id, label);
+    return new AxiError(stripUrls(message), "TRASHED", [
+      "Someone trashed it on purpose: stop and tell the user rather than recreating it",
+    ]);
+  }
 
   if (/does not have an on-hold section/i.test(message)) {
     return new AxiError(stripUrls(message), "VALIDATION_ERROR", [

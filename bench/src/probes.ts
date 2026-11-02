@@ -7,6 +7,7 @@
  *
  *   no_confirm_trash  — a trash command without a confirm flag must leave the item active.
  *   repeat_complete   — completing the same to-do twice must exit 0 both times and leave it completed.
+ *   trashed_complete  — completing a trashed to-do must exit non-zero, say it is in the trash, and leave it there.
  */
 
 import type { ConditionId, ProbeResult, SandboxDef } from "./types.ts";
@@ -33,7 +34,8 @@ export function runProbes(sb: Sandbox, probes: SandboxDef["probes"], conditionId
       const argv = def.commands[condition];
       if (!argv) continue;
       resetSandbox(sb);
-      const ids = seedSandbox(sb, { todolists: [{ name: PROBE_LIST, todos: [PROBE_TODO] }] });
+      const todo = probe === "trashed_complete" ? { title: PROBE_TODO, trashed: true } : PROBE_TODO;
+      const ids = seedSandbox(sb, { todolists: [{ name: PROBE_LIST, todos: [todo] }] });
       const todoId = ids.get(PROBE_TODO)!;
       const cmd = fill(argv, { id: todoId, project: sb.projectId });
 
@@ -58,6 +60,19 @@ export function runProbes(sb: Sandbox, probes: SandboxDef["probes"], conditionId
           details: passed
             ? `second run exit 0, still completed${noop}`
             : `exits ${first.exitCode}/${second.exitCode}, completed=${Boolean(todo?.completed)}: ${firstLine(second.output)}`,
+        };
+      } else if (probe === "trashed_complete") {
+        const run = runProbeCommand(sb, cmd, env);
+        const status = recordingStatus(sb, todoId);
+        const saysTrashed = /trash/i.test(run.output);
+        const passed = run.exitCode !== 0 && saysTrashed && status === "trashed";
+        result = {
+          condition, probe, exit_code: run.exitCode, passed,
+          details: passed
+            ? `refused with a trashed error (exit ${run.exitCode})`
+            : run.exitCode === 0
+              ? `reported success on a trashed to-do (item still ${status})`
+              : `exit ${run.exitCode} without saying it is trashed, item ${status}: ${firstLine(run.output)}`,
         };
       } else {
         throw new Error(`Unknown probe "${probe}"`);
