@@ -29,7 +29,7 @@ basecamp-axi used 22% fewer input tokens, cost 27% less, and finished 19% faster
 - replying again in a fresh session without posting twice;
 - being asked to complete a to-do that is in the trash.
 
-The sandbox now keeps a second card table, as most real projects do, so the card tasks name their table. Card rows are not comparable row by row with the published run. basecamp-axi has no check-in command yet, so it fails the check-in task until one ships. The suite also has three timesheet tasks and one hill-chart task; these are coverage for those commands, not realism, and reports label them so. The agent is `claude-sonnet-5-5`, with 1 repeat. Success is checked by reading Basecamp back after each run; a duplicate counts as a failure.
+The sandbox now keeps a second card table, as most real projects do, so the card tasks name their table. Card rows are not comparable row by row with the published run. basecamp-axi has no check-in command yet, so it fails the check-in task until one ships. The suite also has three timesheet tasks and one hill-chart task; these are coverage for those commands, not realism, so reports label them and exclude them from the headline realism summary. The agent is `claude-sonnet-5-5`, with 1 repeat. Success is checked by reading Basecamp back after each run; a duplicate counts as a failure.
 
 | Condition        | Success | Avg Input Tokens | Avg Cost/Task | Avg Duration | Avg Turns |
 | ---------------- | ------- | ---------------- | ------------- | ------------ | --------- |
@@ -135,6 +135,7 @@ Cross-project commands need no scope: `project list`, `report`, `timesheet repor
 - **Totals**: lists print `count: N of T total` when the underlying CLI reports a total, plus a hint to fetch the rest.
 - **Idempotent**: `todo done` on a completed todo reports `already done (no-op)` and exits 0; the same holds for `recording trash|archive|restore`, `hill track|untrack`, `timesheet update` with values that already match, and `hill update` that moves dots to where they already are (without a note).
 - **Confirmation gate**: trash, archive, restore, and `timesheet delete <entry id|url>` (one permanent deletion) need `--confirm`. Without it they are a dry run.
+- **Trashed items**: completing or reopening a trashed to-do, adding its subtasks, updating or moving a trashed card, and commenting on a trashed item fail with a `TRASHED` error instead of silently succeeding or restoring it. Restore the item only when the user asks.
 - **Strict flags**: unknown flags and extra positionals exit 2 with the list of valid flags. `--json`, `--md`, and `--jq` are rejected with a hint since output is always TOON.
 - **Column names**: `card list --column`, `card create --column`, and `card move --to` accept a column name and resolve it to an id automatically when the project has one card table.
 - **Exit codes**: 0 success (including no-ops), 1 error, 2 usage error.
@@ -156,10 +157,10 @@ npm run bench -- report                            # results/report.md and repor
 
 Tasks and their ground-truth grading hints live in `bench/config/tasks.yaml`. Existing ground truth was last refreshed against one account on 2026-10-23 and needs refreshing if that data changes; the new timesheet-entry and hill-progress-update read tasks need their ground truth captured before the next benchmark run. Defaults: agent and judge `claude-sonnet-5` for the read suite (the published read results use `--model claude-sonnet-5-5` with `BENCH_JUDGE_MODEL=claude-sonnet-5-5`); override with `--model` and `BENCH_JUDGE_MODEL`. Set `BENCH_SKIP_PERMISSIONS=1` to use the upstream `--dangerously-skip-permissions` mode instead of the scoped allowlist. The axi condition runs this checkout's `dist/` build when it exists, so run `npm run build` first.
 
-The write suite (`suite: write` tasks) changes Basecamp, so it runs only inside one sandbox project, configured in `bench/config/sandbox.yaml`. The config sets the CLI profile, the account, the exact project name, the agent model, and a spend cap. The harness creates the project when it is missing. It empties the project and seeds it before every task, and empties it again at the end. Each task is graded by a named check in `bench/src/write-grader.ts` that reads the project back. Before starting, a write matrix prints its cost estimate. It refuses to start over budget and stops once actual spend reaches the cap. After the agent tasks, it runs model-free safety probes (trash without confirmation, completing a to-do twice).
+The write suite (`suite: write` tasks) changes Basecamp, so it runs only inside one sandbox project, configured in `bench/config/sandbox.yaml`. The config sets the CLI profile, the account, the exact project name, the agent model, and a spend cap. The harness creates the project when it is missing. It empties the project and seeds it before every task, and empties it again at the end. Each task is graded by a named check in `bench/src/write-grader.ts` that reads the project back. Before starting, a write matrix prints its cost estimate. It refuses to start over budget and stops once actual spend reaches the cap. After the agent tasks, it runs model-free safety probes (trash without confirmation, completing a to-do twice, and refusing to complete a trashed to-do).
 
 ```sh
-npm run bench -- matrix --suite write             # 15 tasks × 2 conditions + safety probes, estimated under $2
+npm run bench -- matrix --suite write             # 24 tasks × 2 conditions, 52 sessions, estimated $3.12
 npm run bench -- run --condition axi --task card_move
 npm run bench -- report --suite write             # results/write/report.md
 npm run bench -- sandbox reset                    # empty the sandbox project by hand
