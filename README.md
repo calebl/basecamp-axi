@@ -21,10 +21,10 @@ basecamp-axi used 22% fewer input tokens, cost 27% less, and finished 19% faster
 
 | Condition        | Success | Avg Input Tokens | Avg Cost/Task | Avg Duration | Avg Turns |
 | ---------------- | ------- | ---------------- | ------------- | ------------ | --------- |
-| **basecamp-axi** | 9/11    | **83,967**       | **$0.028**    | **8.1s**     | **4**     |
-| basecamp CLI     | 10/11   | 125,552          | $0.047        | 11.3s        | 5         |
+| **basecamp-axi** | 10/11   | **80,869**       | **$0.019**    | **6.2s**     | 4         |
+| basecamp CLI     | 10/11   | 99,346           | $0.033        | 7.7s         | 4         |
 
-On the nine writes both tools support, both passed every task, and basecamp-axi used 36% fewer input tokens, cost 44% less, and finished 29% faster. Repeating a task was the widest gap: neither agent created a duplicate, but the CLI agent took 17 turns and the basecamp-axi agent took 7. The two basecamp-axi failures exposed commands that were missing at benchmark time: creating subtasks and uploading files. The raw CLI agent did not find native subtasks either. In the safety probes, the raw CLI trashed an item at once without confirmation; basecamp-axi treated the same request as a dry run until `--confirm` was added. Full write-up: [`bench/published-results/write/STUDY.md`](bench/published-results/write/STUDY.md).
+This run (2026-11-01, basecamp-axi 0.2.0) follows the new `subtask` and `upload` commands. basecamp-axi now passes the file upload. Both conditions failed only the subtask task. On the ten writes both passed, basecamp-axi used 11% fewer input tokens, cost 41% less, and finished 14% faster. Both agents found the native subtask command, basecamp-axi from the hint printed after `todo create`. Both then tried to add all three subtasks in one shell loop, which the benchmark's scoped permissions deny, so neither created any. Repeating a task created no duplicate in either condition, with 7 turns each. In the safety probes, the raw CLI trashed an item at once without confirmation; basecamp-axi treated the same request as a dry run until `--confirm` was added. Full write-up: [`bench/published-results/write/STUDY.md`](bench/published-results/write/STUDY.md). The earlier run (2026-10-23, basecamp-axi 0.1.0, before `subtask` and `upload`: axi 9/11 vs CLI 10/11) is kept under [`bench/published-results/write/history/`](bench/published-results/write/history/2026-10-23-claude-sonnet-5-5/STUDY.md).
 
 ## Quick start
 
