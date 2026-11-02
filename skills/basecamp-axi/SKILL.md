@@ -1,6 +1,6 @@
 ---
 name: basecamp-axi
-description: "Operate Basecamp through the basecamp-axi CLI - projects, todos and their subtasks, todolists, cards (kanban), messages, comments, file uploads to Docs & Files, campfire chat, people, search, cross-project reports, archiving or trashing recordings, and URL parsing. Use whenever a task touches Basecamp: checking what is assigned to you, listing or creating todos, creating subtasks, completing or reassigning work, reading or replying to messages and comments, moving cards, uploading files, posting to chat, or resolving a Basecamp link."
+description: "Operate Basecamp through the basecamp-axi CLI - projects, todos and their subtasks, todolists, cards (kanban), messages, comments, file uploads to Docs & Files, campfire chat, people, search, cross-project reports, timesheet entries, hill charts, archiving or trashing recordings, and URL parsing. Use whenever a task touches Basecamp: checking what is assigned to you, listing or creating todos, creating subtasks, completing or reassigning work, reading or replying to messages and comments, moving cards, uploading files, posting to chat, logging or correcting time, moving hill chart dots and posting progress updates, or resolving a Basecamp link."
 user-invocable: false
 ---
 
@@ -16,12 +16,12 @@ If a command fails with an authentication error, ask the user to run `basecamp a
 
 ## When to use
 
-Use basecamp-axi whenever a task touches Basecamp: seeing what is assigned to you or overdue; listing, viewing, creating, completing, or reassigning todos; creating their subtasks; browsing todolists; listing, viewing, creating, or moving kanban cards; reading or posting messages; reading or adding comments; uploading files to Docs & Files; posting to Campfire chat; looking up people and mention handles; searching the account; or turning a Basecamp URL into ids.
+Use basecamp-axi whenever a task touches Basecamp: seeing what is assigned to you or overdue; listing, viewing, creating, completing, or reassigning todos; creating their subtasks; browsing todolists; listing, viewing, creating, or moving kanban cards; reading or posting messages; reading or adding comments; uploading files to Docs & Files; posting to Campfire chat; logging, listing, changing, or deleting timesheet entries; reading a hill chart, moving its dots, and posting or reading progress updates; looking up people and mention handles; searching the account; or turning a Basecamp URL into ids.
 
 ## Workflow
 
 1. Run `npx -y basecamp-axi` with no arguments for a dashboard - your open assignments with due dates, plus suggested next commands.
-2. Most commands are project-scoped. Put `--in <project id|name>` AFTER the command (`npx -y basecamp-axi todo list --in 48189809`), or set `BASECAMP_PROJECT`, or rely on a `.basecamp/config.json` with `project_id`. Cross-project commands need no `--in`: `report assigned`, `report overdue`, `search`, `project list`, `people`, `url parse`.
+2. Most commands are project-scoped. Put `--in <project id|name>` AFTER the command (`npx -y basecamp-axi todo list --in 48189809`), or set `BASECAMP_PROJECT`, or rely on a `.basecamp/config.json` with `project_id`. Cross-project commands need no `--in`: `report assigned`, `report overdue`, `timesheet report`, `search`, `project list`, `people`, `url parse`.
 3. Have a Basecamp link? Run `url parse "<url>"` first - it returns the project id, recording id, and the exact command to open it.
 4. Drill in command-first: `todo list`, `todo view <id>`, `message view <id>`, `card list`, `comment list <id>`.
 5. Comments are flat: comment on the parent todo, message, or card - never on another comment. A `#__recording_<id>` URL fragment is a comment id; reply to the recording in the path instead.
@@ -31,8 +31,8 @@ Use basecamp-axi whenever a task touches Basecamp: seeing what is assigned to yo
 ## Commands
 
 ```
-commands[16]:
-  (none)=dashboard, project, todo, subtask, todolist, card, message, comment, upload, chat, people, search, report, recording, url, setup
+commands[18]:
+  (none)=dashboard, project, todo, subtask, todolist, card, message, comment, upload, chat, people, search, report, timesheet, hill, recording, url, setup
 ```
 
 Installed copies also inherit the SDK built-in `update` command (`basecamp-axi update --check`).
@@ -49,6 +49,8 @@ Run `npx -y basecamp-axi --help` for global flags, or `npx -y basecamp-axi <comm
 - For multi-line text, write it to a UTF-8 file and pass `--body-file <path>` (messages, comments) or `--description-file <path>` (todos).
 - Cards: column names are resolved to ids automatically (`card move <id> --to Done`); pass `--card-table <id>` only when a project has several tables.
 - A `TOOL_DISABLED` error means the project has that Basecamp tool turned off; `project view <id>` lists the enabled tools. A `DEPENDENCY_OUTDATED` error means the installed `basecamp` CLI lacks a flag or command; ask the user to run `basecamp upgrade`.
-- `recording trash|archive|restore <id> --in <project>` are the only status-changing commands. Without `--confirm` they print what would change and exit 0 without touching anything; rerun with `--confirm` to apply. Trash is reversible with `recording restore`.
+- `recording trash|archive|restore <id> --in <project>` and `timesheet delete <entry id|url>` need `--confirm`. Timesheet deletion accepts one entry at a time. Without confirmation they print what would change and exit 0 without touching anything; rerun with `--confirm` to apply. Trash is reversible with `recording restore`; a deleted timesheet entry is gone for good.
+- Timesheet: `timesheet create <item id> --hours 1:30` logs time on a to-do, message, card, or other item; `timesheet list --in <project>` or `--item <id>` lists entries; `timesheet report` is account-wide. `timesheet update` with values that already match is a no-op. A `FORBIDDEN` error usually means Timesheet is off for the account.
+- Hill charts: `hill view --in <project>` shows each tracked todolist at 0-100 (50 is the top of the hill). `hill update --dot "Design=60" --note "..."` moves dots and posts a progress update; `hill track <todolist>` puts a list on the hill first. `hill updates` reads past progress updates.
 - Unknown flags are rejected with the list of valid flags - fix the flag rather than retrying blindly.
 - Exit codes: 0 success (including no-ops), 1 error, 2 usage error.

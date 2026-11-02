@@ -15,7 +15,7 @@ project_name: "basecamp-axi bench"
 columns: ["Up next", "In progress", "Done"]
 
 # Default agent model for write tasks (--model overrides). Sonnet 5.5 keeps a
-# full matrix (24 sessions) near $1.20; claude-sonnet-5, used for the read
+# full matrix (32 sessions) at an estimated $1.92; claude-sonnet-5, used for the read
 # suite, measured about $0.11-0.21 per write session and would not fit.
 model: claude-sonnet-5-5
 

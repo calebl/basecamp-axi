@@ -22,3 +22,9 @@ test("unknown command from the wrapped CLI is reported as an outdated dependency
   assert.match(e.message, /`subtasks`/);
   assert.match(e.suggestions[0]!, /basecamp upgrade/);
 });
+
+test("unknown subcommand from the wrapped CLI names its parent command", () => {
+  const e = mapBasecampError({ error: 'unknown command "updates" for "basecamp hillcharts"', code: "usage" }, 1);
+  assert.equal(e.code, "DEPENDENCY_OUTDATED");
+  assert.match(e.message, /`hillcharts updates`/);
+});

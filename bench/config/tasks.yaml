@@ -89,6 +89,24 @@ tasks:
     grading:
       grading_hint: "It is a message in project 48189809, recording id 10126503472, comment id 10141576401 (the URL fragment). The message title is 'Advanced Warehousing'."
 
+  timesheet_entry_view:
+    category: multi_step
+    prompt: >
+      In Basecamp project 48189809, find the most recent timesheet entry, view
+      that individual entry, and report its entry id, date, hours, person,
+      item title, and description.
+    grading:
+      grading_hint: "The answer must identify one individually viewed timesheet entry and report its entry id, date, hours, person, item title, and description. Ground truth must be captured from account 6068025 immediately before the next benchmark run and this note replaced with those exact values."
+
+  hill_progress_updates:
+    category: multi_step
+    prompt: >
+      In Basecamp project 48189809, read the hill chart's progress updates and
+      report the most recent update's id, author, time, note, and every dot's
+      to-do list name and position.
+    grading:
+      grading_hint: "The answer must report the most recent hill chart progress update with its id, author, time, note, and every dot's list name and numeric position. Ground truth must be captured from account 6068025 immediately before the next benchmark run and this note replaced with those exact values."
+
   # ── Category C: Error recovery ─────────────────────────────────
 
   nonexistent_project:
@@ -241,6 +259,90 @@ tasks:
     grading:
       check: upload_exists
       filename: site-plan.txt
+
+  # Timesheet tasks need an account with Timesheet turned on; without it the
+  # seed (and the agent) gets "access denied" and the task fails.
+
+  timesheet_log:
+    suite: write
+    category: write
+    prompt: >
+      In Basecamp project {project}, log 1.5 hours of time on the to-do
+      "Review contract" with the description "Contract review".
+    seed:
+      todolists:
+        - name: Bench Sprint
+          todos: ["Renew domain", "Review contract"]
+    grading:
+      check: timesheet_logged
+      list: Bench Sprint
+      title: Review contract
+      hours: "1.5"
+      description_contains: "Contract review"
+
+  timesheet_update:
+    suite: write
+    category: write
+    prompt: >
+      In Basecamp project {project}, the timesheet entry on the to-do
+      "Review contract" should be 2.5 hours, not 1. Correct it.
+    seed:
+      todolists:
+        - name: Bench Sprint
+          todos: ["Renew domain", "Review contract"]
+      timesheet:
+        - todo: Review contract
+          hours: "1"
+          description: Contract review
+    grading:
+      check: timesheet_logged
+      list: Bench Sprint
+      title: Review contract
+      hours: "2.5"
+      description_contains: "Contract review"
+
+  timesheet_delete:
+    suite: write
+    category: write
+    prompt: >
+      In Basecamp project {project}, delete the timesheet entry logged on the
+      to-do "Renew domain"; it was logged by mistake.
+    seed:
+      todolists:
+        - name: Bench Sprint
+          todos: ["Renew domain", "Review contract"]
+      timesheet:
+        - todo: Renew domain
+          hours: "0.5"
+          description: Domain renewal
+        - todo: Review contract
+          hours: "1"
+          description: Contract review
+    grading:
+      check: timesheet_removed
+      list: Bench Sprint
+      title: Renew domain
+      still_logged: ["Review contract"]
+
+  hill_update:
+    suite: write
+    category: write
+    prompt: >
+      On the hill chart of Basecamp project {project}, move "Design" to 60 and
+      post a progress update with the note "Design is over the hill".
+    seed:
+      todolists:
+        - name: Design
+          todos: ["Sketch screens"]
+        - name: Build
+          todos: ["Set up repo"]
+      hill: ["Design", "Build"]
+    grading:
+      check: hill_progress
+      dots:
+        Design: 60
+        Build: 0
+      note_contains: "Design is over the hill"
 
   # ── Write suite: safety ────────────────────────────────────────
 

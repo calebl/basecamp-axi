@@ -5,7 +5,7 @@ import { join, resolve } from "node:path";
 import { parse as parseYaml } from "yaml";
 
 import { CHECKS, gradeWrite, norm } from "../src/write-grader.ts";
-import type { BasecampReader, TodoItem } from "../src/sandbox.ts";
+import type { BasecampReader, HillDot, TimesheetItem, TodoItem } from "../src/sandbox.ts";
 import type { SandboxDef } from "../src/types.ts";
 
 const ME = "me@example.com";
@@ -23,9 +23,16 @@ function reader(over: Partial<BasecampReader> & { todoItems?: TodoItem[] } = {})
     messages: () => [],
     chatLines: () => [],
     uploads: () => [],
+    timesheetEntries: () => [],
+    hillDots: () => [],
+    hillUpdates: () => [],
     ...over,
   };
 }
+
+const entry = (todoId: string, hours: string, description = ""): TimesheetItem => ({
+  id: `${todoId}-${hours}`, hours, date: "2026-11-01", description, item_id: todoId, item_title: todoId,
+});
 
 const todo = (title: string, extra: Partial<TodoItem> = {}): TodoItem => ({
   id: title, title, completed: false, assignees: [], due_on: null, ...extra,
@@ -107,6 +114,39 @@ test("message, chat and upload checks", () => {
   assert.equal(gradeWrite({ check: "upload_exists", filename: "other.txt" }, msgs).task_success, false);
 });
 
+test("timesheet_logged needs one entry with matching hours and description", () => {
+  const spec = { check: "timesheet_logged", list: "Bench Sprint", title: "Review contract", hours: "1.5", description_contains: "Contract review" };
+  const todos = [todo("Review contract"), todo("Renew domain")];
+  assert.equal(gradeWrite(spec, reader({ todoItems: todos, timesheetEntries: () => [entry("Review contract", "1:30", "Contract review")] })).task_success, true);
+  assert.equal(gradeWrite(spec, reader({ todoItems: todos, timesheetEntries: () => [entry("Review contract", "1.0", "Contract review")] })).task_success, false);
+  assert.equal(gradeWrite(spec, reader({ todoItems: todos, timesheetEntries: () => [entry("Renew domain", "1.5", "Contract review")] })).task_success, false);
+  const dup = gradeWrite(spec, reader({
+    todoItems: todos,
+    timesheetEntries: () => [entry("Review contract", "1.5", "Contract review"), entry("Review contract", "1.5", "Contract review")],
+  }));
+  assert.equal(dup.task_success, false);
+  assert.match(dup.details, /found 2/);
+});
+
+test("timesheet_removed requires the other entries to stay", () => {
+  const spec = { check: "timesheet_removed", list: "Bench Sprint", title: "Renew domain", still_logged: ["Review contract"] };
+  const todos = [todo("Review contract"), todo("Renew domain")];
+  assert.equal(gradeWrite(spec, reader({ todoItems: todos, timesheetEntries: () => [entry("Review contract", "1")] })).task_success, true);
+  assert.equal(gradeWrite(spec, reader({ todoItems: todos, timesheetEntries: () => [entry("Review contract", "1"), entry("Renew domain", "0.5")] })).task_success, false);
+  assert.equal(gradeWrite(spec, reader({ todoItems: todos, timesheetEntries: () => [] })).task_success, false);
+});
+
+test("hill_progress checks dot positions and exactly one matching update", () => {
+  const spec = { check: "hill_progress", dots: { Design: 60, Build: 0 }, note_contains: "Design is over the hill" };
+  const dots: HillDot[] = [{ id: "1", label: "Design", position: 60 }, { id: "2", label: "Build", position: 0 }];
+  const update = { id: "u", note: "<p>Design is over the hill</p>", dots };
+  assert.equal(gradeWrite(spec, reader({ hillDots: () => dots, hillUpdates: () => [update] })).task_success, true);
+  assert.equal(gradeWrite(spec, reader({ hillDots: () => dots, hillUpdates: () => [] })).task_success, false);
+  assert.equal(gradeWrite(spec, reader({ hillDots: () => dots, hillUpdates: () => [update, { ...update, id: "v" }] })).task_success, false);
+  const moved = dots.map((d) => (d.label === "Build" ? { ...d, position: 60 } : d));
+  assert.equal(gradeWrite(spec, reader({ hillDots: () => moved, hillUpdates: () => [update] })).task_success, false);
+});
+
 test("read failures and unknown checks grade as failures", () => {
   const broken = reader({ todolists: () => { throw new Error("access denied"); } });
   const g = gradeWrite({ check: "todo_created", list: "Bench Sprint", title: "x" }, broken);
@@ -115,11 +155,19 @@ test("read failures and unknown checks grade as failures", () => {
   assert.equal(gradeWrite({ check: "nope" }, reader()).task_success, false);
 });
 
-test("every write task names a known check and every probe covers both conditions", () => {
+test("task suites are complete and every probe covers both conditions", () => {
   const config = resolve(import.meta.dirname, "..", "config");
   const tasks = parseYaml(readFileSync(join(config, "tasks.yaml"), "utf-8")).tasks as Record<string, any>;
+  const read = Object.entries(tasks).filter(([, t]) => t.suite !== "write");
   const write = Object.entries(tasks).filter(([, t]) => t.suite === "write");
+  assert.ok(read.length >= 12, `expected at least 12 read tasks, found ${read.length}`);
   assert.ok(write.length >= 10, `expected at least 10 write tasks, found ${write.length}`);
+  for (const id of ["timesheet_entry_view", "hill_progress_updates"]) {
+    const task = tasks[id];
+    assert.ok(task, `${id}: missing read task`);
+    assert.notEqual(task.suite, "write", `${id}: must be in the read suite`);
+    assert.equal(task.category, "multi_step", `${id}: expected multi-step retrieval`);
+  }
   for (const [id, t] of write) {
     assert.ok(CHECKS[t.grading?.check], `${id}: unknown check ${t.grading?.check}`);
     assert.match(t.prompt, /\{project\}/, `${id}: prompt must name the sandbox project`);

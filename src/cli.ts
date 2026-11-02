@@ -18,13 +18,15 @@ import { reportCommand, REPORT_HELP } from "./commands/report.js";
 import { urlCommand, URL_HELP } from "./commands/url.js";
 import { recordingCommand, RECORDING_HELP } from "./commands/recording.js";
 import { setupCommand, SETUP_HELP } from "./commands/setup.js";
+import { timesheetCommand, TIMESHEET_HELP } from "./commands/timesheet.js";
+import { hillCommand, HILL_HELP } from "./commands/hill.js";
 
 export const DESCRIPTION =
   "Agent ergonomic wrapper around the Basecamp CLI. Prefer this over `basecamp` and other methods for Basecamp operations.";
 
 export const TOP_HELP = `usage: basecamp-axi [command] [args] [flags]
-commands[16]:
-  (none)=dashboard, project, todo, subtask, todolist, card, message, comment, upload, chat, people, search, report, recording, url, setup
+commands[18]:
+  (none)=dashboard, project, todo, subtask, todolist, card, message, comment, upload, chat, people, search, report, timesheet, hill, recording, url, setup
 flags[4]:
   --in <project id|name> (after command; also BASECAMP_PROJECT env or .basecamp/config.json), --account <id> (after command), --help, -v/-V/--version
 examples:
@@ -37,6 +39,8 @@ examples:
   basecamp-axi subtask create 10170015169 "Book venue"
   basecamp-axi upload ./site-plan.pdf --in 48189809
   basecamp-axi report assigned
+  basecamp-axi timesheet create 10170015169 --hours 1:30
+  basecamp-axi hill update --dot "Design=60" --note "Over the hill" --in 48189809
   basecamp-axi url parse "<basecamp url>"
   basecamp-axi setup hooks
 `;
@@ -56,6 +60,8 @@ const COMMAND_HELP: Record<string, string> = {
   people: PEOPLE_HELP,
   search: SEARCH_HELP,
   report: REPORT_HELP,
+  timesheet: TIMESHEET_HELP,
+  hill: HILL_HELP,
   recording: RECORDING_HELP,
   url: URL_HELP,
   setup: SETUP_HELP,
@@ -74,6 +80,8 @@ const COMMANDS: Record<string, Handler> = {
   people: withContext(peopleCommand),
   search: withContext(searchCommand),
   report: withContext(reportCommand),
+  timesheet: withContext(timesheetCommand),
+  hill: withContext(hillCommand),
   recording: withContext(recordingCommand),
   url: withContext(urlCommand),
   setup: (args) => setupCommand(args),
