@@ -14,10 +14,26 @@ export interface GradingSpec {
   [param: string]: unknown;
 }
 
+/** A seeded to-do: a bare title, or a title with comments, subtasks, or a move to the trash. */
+export type SeedTodo = string | {
+  title: string;
+  /** Comments posted on the to-do, oldest first. */
+  comments?: string[];
+  /** Subtask titles, all open. */
+  subtasks?: string[];
+  /** Moved to the trash after the rest of its list is seeded. */
+  trashed?: boolean;
+};
+
 /** Content created in the sandbox project before a write task runs. */
 export interface SeedSpec {
-  todolists?: { name: string; todos?: string[] }[];
+  todolists?: { name: string; todos?: SeedTodo[] }[];
+  /** Cards on the default card table. */
   cards?: { title: string; column: string }[];
+  /** Cards on another card table, named by its title; the table itself comes from sandbox.yaml `card_tables`. */
+  card_tables?: { name: string; cards: { title: string; column: string }[] }[];
+  /** Automatic Check-in questions, asked every weekday. */
+  checkins?: { question: string }[];
   messages?: { title: string; body?: string }[];
   /** Timesheet entries logged against seeded to-dos, named by to-do title. */
   timesheet?: { todo: string; hours: string; description?: string }[];
@@ -36,6 +52,11 @@ export interface TaskDef {
   files?: Record<string, string>;
   /** Agent sessions per trial; 2 re-runs the same prompt to test idempotency. Default 1. */
   sessions?: number;
+  /**
+   * Acceptance coverage for a command, not a measure of realistic use: the operation has no
+   * recorded real-world use. Reports label these tasks so they stay out of realism claims.
+   */
+  coverage?: boolean;
 }
 
 export interface SandboxDef {
@@ -46,6 +67,8 @@ export interface SandboxDef {
   project_name: string;
   /** Columns the card table must have besides the built-in ones. */
   columns: string[];
+  /** Extra card tables, by title, kept in the project with these columns; created when missing. */
+  card_tables?: { name: string; columns: string[] }[];
   /** Default agent model for write tasks; --model overrides. */
   model: string;
   budget_usd: number;

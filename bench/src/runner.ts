@@ -42,6 +42,18 @@ export function agentPath(): string {
   return [shimDir, process.env.PATH ?? ""].join(delimiter);
 }
 
+/**
+ * Fill a write prompt: {project} becomes the sandbox project id and {url:List/Title} the web link
+ * of a seeded to-do. A template with nothing seeded behind it is a task-definition error.
+ */
+export function fillPrompt(prompt: string, projectId: string, seeded: Map<string, string>): string {
+  return prompt.replaceAll("{project}", projectId).replace(/\{url:([^}]+)\}/g, (_m, key: string) => {
+    const url = seeded.get(`url:${key}`);
+    if (!url) throw new Error(`Prompt names {url:${key}}, but the seed created no to-do "${key}" with a link.`);
+    return url;
+  });
+}
+
 /** Sum usage across the sessions of one trial. */
 export function mergeUsage(parts: UsageMetrics[]): UsageMetrics {
   const total = (key: keyof UsageMetrics): number => parts.reduce((acc, u) => acc + (u[key] as number), 0);
@@ -91,8 +103,8 @@ export function runOne(
     let env: NodeJS.ProcessEnv = { ...process.env, PATH: agentPath() };
     if (sandbox) {
       resetSandbox(sandbox);
-      seedSandbox(sandbox, task.seed);
-      prompt = prompt.replaceAll("{project}", sandbox.projectId);
+      const seeded = seedSandbox(sandbox, task.seed);
+      prompt = fillPrompt(prompt, sandbox.projectId, seeded);
       env = { ...sandboxEnv(sandbox.def), PATH: env.PATH };
     }
 

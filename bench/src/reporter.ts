@@ -82,7 +82,8 @@ export function summarize(results?: RunResult[]): ConditionSummary[] {
   return summaries;
 }
 
-export function markdownReport(results?: RunResult[]): string {
+/** `coverage` names tasks that are acceptance coverage for a command rather than realistic use; their sections say so. */
+export function markdownReport(results?: RunResult[], coverage: ReadonlySet<string> = new Set()): string {
   const all = results ?? loadResults();
   if (all.length === 0) return "No results found.\n";
 
@@ -108,9 +109,12 @@ export function markdownReport(results?: RunResult[]): string {
   // Per-task breakdown
   lines.push("\n## Per-Task Breakdown\n");
   const byTask = groupBy(all, (r) => r.task);
+  if ([...byTask.keys()].some((t) => coverage.has(t))) {
+    lines.push("Tasks marked (coverage) exercise commands with no recorded real-world use. They are acceptance coverage, not a measure of realistic use.\n");
+  }
 
   for (const [taskId, taskRuns] of byTask) {
-    lines.push(`### ${taskId}\n`);
+    lines.push(`### ${taskId}${coverage.has(taskId) ? " (coverage)" : ""}\n`);
     lines.push("| Condition | Avg Input Tokens | Cache% | Avg Output Tokens | Avg Cost | Total Cost | Avg Duration | Avg Turns | Success |");
     lines.push("|-----------|-----------------|--------|-------------------|----------|------------|-------------|-----------|---------|");
 
@@ -178,12 +182,12 @@ export function probesReport(probes: ProbeResult[]): string {
   return lines.join("\n") + "\n";
 }
 
-export function writeReports(suite: Suite = "read"): void {
+export function writeReports(suite: Suite = "read", coverage: ReadonlySet<string> = new Set()): void {
   const dir = resultsDir(suite);
   const results = loadResults(dir);
   const probesPath = join(dir, "probes.json");
   const probes = existsSync(probesPath) ? (JSON.parse(readFileSync(probesPath, "utf-8")) as ProbeResult[]) : [];
-  const md = markdownReport(results) + (probes.length ? "\n" + probesReport(probes) : "");
+  const md = markdownReport(results, coverage) + (probes.length ? "\n" + probesReport(probes) : "");
   const csv = csvReport(results);
   writeFileSync(join(dir, "report.md"), md);
   writeFileSync(join(dir, "report.csv"), csv);

@@ -65,6 +65,24 @@ export function minutes(hours: unknown): number | undefined {
   return /^\d*\.?\d+$/.test(s) ? Math.round(Number(s) * 60) : undefined;
 }
 
+/** Other records a check names, e.g. none_on: [{ list, title }] or untouched: [{ table, title, column }]. */
+function targets(p: Params, key: string): { list: string; title: string; table?: string; column?: string }[] {
+  const raw = Array.isArray(p[key]) ? (p[key] as Record<string, unknown>[]) : [];
+  return raw.map((t) => ({
+    list: String(t.list ?? ""),
+    title: String(t.title ?? ""),
+    table: t.table === undefined ? undefined : String(t.table),
+    column: t.column === undefined ? undefined : String(t.column),
+  }));
+}
+
+/** Filenames of the <bc-attachment> elements in rich-text HTML. */
+export function attachmentNames(html: string): string[] {
+  return [...html.matchAll(/<bc-attachment\b[^>]*>/gi)]
+    .map((m) => /\bfilename="([^"]*)"/i.exec(m[0])?.[1] ?? "")
+    .filter(Boolean);
+}
+
 /** Positions by to-do list name, e.g. { Design: 60, Build: 0 }. */
 function dotPositions(p: Params): [string, number][] {
   const dots = p.dots && typeof p.dots === "object" ? (p.dots as Record<string, unknown>) : {};
@@ -111,21 +129,139 @@ export const CHECKS: Record<string, Check> = {
     return pass(`"${todo.title}" is completed and the rest are untouched.`);
   },
 
-  /** One comment containing the text sits on the named to-do. */
+  /**
+   * One comment containing the text sits on the named to-do. Optional: `list_items`, the number of
+   * <li> items that comment must hold (a Markdown list arrived as a list), and `none_on`, other
+   * to-dos ({ list, title }) that must have no comment containing the text.
+   */
   todo_comment(r, p) {
     const todo = findTodo(r, str(p, "list"), str(p, "title"));
     if (isGrade(todo)) return todo;
-    return exactlyOneContaining(r.comments(todo.id).map((c) => c.text), str(p, "contains"), `on to-do "${todo.title}"`);
+    const needle = str(p, "contains");
+    const comments = r.comments(todo.id).map((c) => c.text);
+    const found = exactlyOneContaining(comments, needle, `on to-do "${todo.title}"`);
+    if (!found.task_success) return found;
+    if (p.list_items !== undefined) {
+      const comment = comments.find((t) => norm(t).includes(norm(needle)))!;
+      const items = (comment.match(/<li[\s>]/gi) ?? []).length;
+      if (items !== Number(p.list_items)) {
+        return fail(`The comment holds ${items} list items, expected ${Number(p.list_items)}; the Markdown list did not arrive as a list.`);
+      }
+    }
+    for (const other of targets(p, "none_on")) {
+      const wrong = findTodo(r, other.list, other.title);
+      if (isGrade(wrong)) return wrong;
+      if (r.comments(wrong.id).some((c) => norm(c.text).includes(norm(needle)))) {
+        return fail(`"${needle}" was also posted on "${other.title}" in "${other.list}", the wrong to-do.`);
+      }
+    }
+    return found;
   },
 
-  /** One card with the title sits in the named column. */
-  card_in_column(r, p) {
-    const cards = r.cards().filter((c) => norm(c.title) === norm(str(p, "title")));
-    if (cards.length !== 1) return fail(`Expected one card "${str(p, "title")}", found ${cards.length}.`);
-    if (norm(cards[0].column) !== norm(str(p, "column"))) {
-      return fail(`Card "${cards[0].title}" is in "${cards[0].column}", expected "${str(p, "column")}".`);
+  /**
+   * One comment containing the text sits on the named to-do and carries an attached file with the
+   * given filename (a <bc-attachment> in the comment body, not a separate upload).
+   */
+  comment_attachment(r, p) {
+    const todo = findTodo(r, str(p, "list"), str(p, "title"));
+    if (isGrade(todo)) return todo;
+    const needle = str(p, "contains");
+    const comments = r.comments(todo.id).map((c) => c.text);
+    const found = exactlyOneContaining(comments, needle, `on to-do "${todo.title}"`);
+    if (!found.task_success) return found;
+    const comment = comments.find((t) => norm(t).includes(norm(needle)))!;
+    const files = attachmentNames(comment);
+    if (!files.includes(str(p, "filename"))) {
+      return fail(`The comment attaches [${quoted(files)}], expected "${str(p, "filename")}".`);
     }
-    return pass(`Card "${cards[0].title}" is in "${cards[0].column}".`);
+    return pass(`The comment on "${todo.title}" attaches "${str(p, "filename")}".`);
+  },
+
+  /**
+   * One card with the title sits in the named column. Optional: `table`, the card table by title
+   * (default: the project's main table), and `untouched`, cards ({ table, title, column }) that
+   * must still be where the seed put them.
+   */
+  card_in_column(r, p) {
+    const table = p.table === undefined ? undefined : str(p, "table");
+    const cards = r.cards(table).filter((c) => norm(c.title) === norm(str(p, "title")));
+    const where = table ? ` on "${table}"` : "";
+    if (cards.length !== 1) return fail(`Expected one card "${str(p, "title")}"${where}, found ${cards.length}.`);
+    if (norm(cards[0].column) !== norm(str(p, "column"))) {
+      return fail(`Card "${cards[0].title}"${where} is in "${cards[0].column}", expected "${str(p, "column")}".`);
+    }
+    for (const other of targets(p, "untouched")) {
+      const hits = r.cards(other.table).filter((c) => norm(c.title) === norm(other.title));
+      const label = `"${other.title}" on ${other.table && other.table !== "default" ? `"${other.table}"` : "the main table"}`;
+      if (hits.length !== 1) return fail(`Expected one card ${label}, found ${hits.length}.`);
+      if (norm(hits[0].column) !== norm(other.column ?? "")) {
+        return fail(`Card ${label} moved to "${hits[0].column}"; it should have stayed in "${other.column}".`);
+      }
+    }
+    return pass(`Card "${cards[0].title}"${where} is in "${cards[0].column}".`);
+  },
+
+  /** One card with the title sits in the column with the body text, and no card keeps any `absent` title. */
+  card_fields(r, p) {
+    const all = r.cards();
+    const cards = all.filter((c) => norm(c.title) === norm(str(p, "title")));
+    if (cards.length !== 1) return fail(`Expected one card "${str(p, "title")}", found ${cards.length}.`);
+    const card = cards[0];
+    if (p.column && norm(card.column) !== norm(str(p, "column"))) {
+      return fail(`Card "${card.title}" is in "${card.column}", expected "${str(p, "column")}".`);
+    }
+    if (p.body_contains && !norm(card.body).includes(norm(str(p, "body_contains")))) {
+      return fail(`Card "${card.title}" description does not contain "${str(p, "body_contains")}".`);
+    }
+    for (const gone of strs(p, "absent")) {
+      const left = all.filter((c) => norm(c.title) === norm(gone)).length;
+      if (left) return fail(`A card is still titled "${gone}" (${left}); it should have been renamed, not copied.`);
+    }
+    return pass(`Card "${card.title}" has the expected title, column and description.`);
+  },
+
+  /**
+   * No active to-do titled `title` exists in any list (the seeded one stays in the trash, and no
+   * copy was made), and each `still_open` to-do is still open.
+   */
+  todo_absent(r, p) {
+    const all = r.todolists().flatMap((l) => r.todos(l.id).map((t) => ({ ...t, list: l.name })));
+    const hits = all.filter((t) => norm(t.title) === norm(str(p, "title")));
+    if (hits.length) {
+      return fail(`Found ${hits.length} active to-do${hits.length === 1 ? "" : "s"} "${str(p, "title")}" (${hits.map((t) => `${t.completed ? "completed" : "open"} in "${t.list}"`).join(", ")}); the trashed one was restored or recreated.`);
+    }
+    for (const other of strs(p, "still_open")) {
+      const sibling = all.filter((t) => norm(t.title) === norm(other));
+      if (sibling.length !== 1) return fail(`Expected one to-do "${other}", found ${sibling.length}.`);
+      if (sibling[0].completed) return fail(`"${other}" was completed; it should be untouched.`);
+    }
+    return pass(`"${str(p, "title")}" stayed in the trash and nothing else changed.`);
+  },
+
+  /** On the named to-do, one subtask is completed and each `still_open` subtask is not. */
+  subtask_completed(r, p) {
+    const todo = findTodo(r, str(p, "list"), str(p, "title"));
+    if (isGrade(todo)) return todo;
+    const subtasks = r.subtasks(todo.id);
+    const pick = (title: string) => subtasks.filter((s) => norm(s.title) === norm(title));
+    const target = pick(str(p, "subtask"));
+    if (target.length !== 1) return fail(`Expected one subtask "${str(p, "subtask")}", found ${target.length}.`);
+    if (!target[0].completed) return fail(`Subtask "${target[0].title}" is still open.`);
+    for (const other of strs(p, "still_open")) {
+      const sibling = pick(other);
+      if (sibling.length !== 1) return fail(`Expected one subtask "${other}", found ${sibling.length}.`);
+      if (sibling[0].completed) return fail(`Subtask "${other}" was completed too.`);
+    }
+    if (todo.completed) return fail(`The parent to-do "${todo.title}" was completed; only the subtask should be.`);
+    return pass(`Subtask "${target[0].title}" is done and the rest are open.`);
+  },
+
+  /** Exactly one answer by me to the named check-in question contains the text. */
+  checkin_answered(r, p) {
+    const question = str(p, "question");
+    const answers = r.checkinAnswers().filter((a) => norm(a.question) === norm(question));
+    const mine = answers.filter((a) => norm(a.creator) === norm(r.meEmail()));
+    return exactlyOneContaining(mine.map((a) => a.text), str(p, "contains"), `in my answers to "${question}"`);
   },
 
   /** One message with the title whose body contains the text. */

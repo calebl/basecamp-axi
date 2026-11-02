@@ -14,14 +14,22 @@ project_name: "basecamp-axi bench"
 # Card-table columns the tasks refer to; created when missing.
 columns: ["Up next", "In progress", "Done"]
 
+# A second card table, kept in the project between runs (card_move_two_tables).
+# It cannot be created per task: Basecamp keeps a removed table in the dock for
+# days and the basecamp CLI still counts it, so it would leak into later tasks.
+card_tables:
+  - name: Punch list
+    columns: ["Up next", "In progress", "Done"]
+
 # Default agent model for write tasks (--model overrides). Sonnet 5.5 keeps a
-# full matrix (32 sessions) at an estimated $1.92; claude-sonnet-5, used for the read
-# suite, measured about $0.11-0.21 per write session and would not fit.
+# full matrix (52 sessions) at an estimated $3.12, against about $0.024 per
+# session observed; claude-sonnet-5, used for the read suite, measured about
+# $0.11-0.21 per write session and would not fit.
 model: claude-sonnet-5-5
 
 # A matrix refuses to start when its estimate exceeds the budget and stops
 # once actual spend reaches it. --budget overrides for one run.
-budget_usd: 2.00
+budget_usd: 3.50
 estimate_per_session_usd: 0.06
 
 # Tool-level probes, run once per condition after the agent tasks. No model is
@@ -34,6 +42,11 @@ probes:
       cli: ["basecamp", "todos", "trash", "{id}", "--in", "{project}"]
   repeat_complete:
     description: "Completing the same to-do twice must exit 0 both times and leave it completed."
+    commands:
+      axi: ["basecamp-axi", "todo", "done", "{id}", "--in", "{project}"]
+      cli: ["basecamp", "todos", "complete", "{id}", "--in", "{project}"]
+  trashed_complete:
+    description: "Completing a trashed to-do must exit non-zero and say it is in the trash."
     commands:
       axi: ["basecamp-axi", "todo", "done", "{id}", "--in", "{project}"]
       cli: ["basecamp", "todos", "complete", "{id}", "--in", "{project}"]

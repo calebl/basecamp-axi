@@ -8,7 +8,7 @@ Wraps the official [`basecamp`](https://github.com/basecamp/basecamp-cli) CLI wi
 
 Agent ergonomics is measurable. The harness in [`bench/`](bench/) runs the same Basecamp tasks through two conditions: an agent using basecamp-axi and one using the raw `basecamp` CLI.
 
-**Read tasks.** The published run used ten read-only tasks (assignments across projects, overdue work, message comment threads, card counts, URL resolution, a not-found case, and more), with `claude-sonnet-5-5` as the agent (the same model as the write tasks), 1 repeat, and an LLM judge scoring task success. The current suite adds timesheet-entry and hill-progress-update reads; their ground truth must be captured before the next run.
+**Read tasks.** The published run used ten read-only tasks (assignments across projects, overdue work, message comment threads, card counts, URL resolution, a not-found case, and more), with `claude-sonnet-5-5` as the agent (the same model as the write tasks), 1 repeat, and an LLM judge scoring task success. The current suite was rebalanced toward how agents actually used Basecamp across 2,128 recorded calls. It drops the project-tools, project-people and overdue-across-projects tasks, which no recorded session needed. It adds a read of a recording by bare id, the most common real read. It also adds timesheet-entry and hill-progress-update reads, labelled coverage rather than realism because neither feature had any recorded use; their ground truth must be captured before the next run.
 
 | Condition        | Success   | Avg Input Tokens | Avg Cost/Task | Avg Duration | Avg Turns |
 | ---------------- | --------- | ---------------- | ------------- | ------------ | --------- |
@@ -17,14 +17,26 @@ Agent ergonomics is measurable. The harness in [`bench/`](bench/) runs the same 
 
 basecamp-axi used 22% fewer input tokens, cost 27% less, and finished 19% faster. The gap is widest on cross-project work: "which to-dos are overdue and which is oldest" took the raw CLI agent 9 turns, against 3 for basecamp-axi's single report, and the raw CLI agent failed "what is assigned to me" after a truncated listing. Full write-up and per-task numbers: [`bench/published-results/STUDY.md`](bench/published-results/STUDY.md). The earlier `claude-sonnet-5` run (2026-09-11, 3 repeats: axi $0.040 vs CLI $0.070 per task, both 100%) is kept under [`bench/published-results/history/`](bench/published-results/history/2026-09-11-claude-sonnet-5/STUDY.md).
 
-**Write tasks.** The published run used eleven everyday writes in a throwaway sandbox project: create a to-do with an assignee and due date, create one with subtasks, complete one, comment on one, create and move cards, post and reply to messages, post in chat, upload a file, and repeat a task in a fresh session. The current suite adds three timesheet tasks and one hill-chart task. The agent is `claude-sonnet-5-5`, with 1 repeat. Success is checked by reading Basecamp back after each run; a duplicate counts as a failure.
+**Write tasks.** The published run used eleven everyday writes in a throwaway sandbox project: create a to-do with an assignee and due date, create one with subtasks, complete one, comment on one, create and move cards, post and reply to messages, post in chat, upload a file, and repeat a task in a fresh session. The current suite leans toward the writes agents make most in real use. It adds:
+
+- a comment whose body comes from a Markdown file;
+- a reply to a to-do given only its link, where another list has a to-do with the same title;
+- a comment with a file attached;
+- completing one subtask;
+- answering a check-in question;
+- renaming a card and setting its description;
+- moving a card on the second of two card tables;
+- replying again in a fresh session without posting twice;
+- being asked to complete a to-do that is in the trash.
+
+basecamp-axi has no check-in command yet, so it fails the check-in task until one ships. The suite also has three timesheet tasks and one hill-chart task; these are coverage for those commands, not realism, and reports label them so. The agent is `claude-sonnet-5-5`, with 1 repeat. Success is checked by reading Basecamp back after each run; a duplicate counts as a failure.
 
 | Condition        | Success | Avg Input Tokens | Avg Cost/Task | Avg Duration | Avg Turns |
 | ---------------- | ------- | ---------------- | ------------- | ------------ | --------- |
 | **basecamp-axi** | 10/11   | **80,869**       | **$0.019**    | **6.2s**     | 4         |
 | basecamp CLI     | 10/11   | 99,346           | $0.033        | 7.7s         | 4         |
 
-This run (2026-11-01, basecamp-axi 0.2.0) follows the new `subtask` and `upload` commands. basecamp-axi now passes the file upload. Both conditions failed only the subtask task. On the ten writes both passed, basecamp-axi used 11% fewer input tokens, cost 41% less, and finished 14% faster. Both agents found the native subtask command, basecamp-axi from the hint printed after `todo create`. Both then tried to add all three subtasks in one shell loop, which the benchmark's scoped permissions deny, so neither created any. Repeating a task created no duplicate in either condition, with 7 turns each. In the safety probes, the raw CLI trashed an item at once without confirmation; basecamp-axi treated the same request as a dry run until `--confirm` was added. Full write-up: [`bench/published-results/write/STUDY.md`](bench/published-results/write/STUDY.md). The earlier run (2026-10-23, basecamp-axi 0.1.0, before `subtask` and `upload`: axi 9/11 vs CLI 10/11) is kept under [`bench/published-results/write/history/`](bench/published-results/write/history/2026-10-23-claude-sonnet-5-5/STUDY.md).
+This run (2026-11-01, basecamp-axi 0.2.0) follows the new `subtask` and `upload` commands. basecamp-axi now passes the file upload. Both conditions failed only the subtask task. On the ten writes both passed, basecamp-axi used 11% fewer input tokens, cost 41% less, and finished 14% faster. Both agents found the native subtask command, basecamp-axi from the hint printed after `todo create`. Both then tried to add all three subtasks in one shell loop, which the benchmark's scoped permissions deny, so neither created any. Repeating a task created no duplicate in either condition, with 7 turns each. In the safety probes, the raw CLI trashed an item at once without confirmation; basecamp-axi treated the same request as a dry run until `--confirm` was added. The current probes also complete a trashed to-do, which must fail with a clear "trashed" error. Full write-up: [`bench/published-results/write/STUDY.md`](bench/published-results/write/STUDY.md). The earlier run (2026-10-23, basecamp-axi 0.1.0, before `subtask` and `upload`: axi 9/11 vs CLI 10/11) is kept under [`bench/published-results/write/history/`](bench/published-results/write/history/2026-10-23-claude-sonnet-5-5/STUDY.md).
 
 ## Quick start
 
