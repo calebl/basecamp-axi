@@ -5,7 +5,7 @@ import { join, resolve } from "node:path";
 import { parse as parseYaml } from "yaml";
 
 import { CHECKS, attachmentNames, gradeWrite, norm } from "../src/write-grader.ts";
-import type { BasecampReader, CardItem, HillDot, TimesheetItem, TodoItem } from "../src/sandbox.ts";
+import type { BasecampReader, CardItem, HillDot, RecordingState, TimesheetItem, TodoItem } from "../src/sandbox.ts";
 import type { SandboxDef } from "../src/types.ts";
 
 const ME = "me@example.com";
@@ -17,6 +17,7 @@ function reader(over: Partial<BasecampReader> & { todoItems?: TodoItem[] } = {})
     meEmail: () => ME,
     todolists: () => [{ id: "L1", name: "Bench Sprint" }],
     todos: (id) => (id === "L1" ? todos : []),
+    recording: (id) => ({ id, status: "trashed", completed: false, updated_at: "seeded" }),
     subtasks: () => [],
     comments: () => [],
     cards: () => [],
@@ -131,15 +132,23 @@ test("card_fields needs the new title, description and column, with the old titl
   assert.equal(gradeWrite(spec, reader({ cards: () => [{ ...renamed, column: "Done" }] })).task_success, false);
 });
 
-test("todo_comment list_items needs the Markdown list to arrive as a list", () => {
-  const spec = { check: "todo_comment", list: "Bench Sprint", title: "Review contract", contains: "Add the late fee clause", list_items: 3 };
+test("todo_comment list_items needs every Markdown list item", () => {
+  const spec = {
+    check: "todo_comment", list: "Bench Sprint", title: "Review contract", contains: "Add the late fee clause",
+    list_items: ["Fix the payment date", "Add the late fee clause", "Correct the site address"],
+  };
   const html = "<p>Reviewed the draft. Three changes:</p><ul><li>Fix the payment date</li><li>Add the late fee clause</li><li>Correct the site address</li></ul>";
   const asList = reader({ todoItems: [todo("Review contract")], comments: () => [{ id: "c", text: html }] });
   assert.equal(gradeWrite(spec, asList).task_success, true);
   const flat = reader({ todoItems: [todo("Review contract")], comments: () => [{ id: "c", text: "<p>- Fix the payment date - Add the late fee clause - Correct the site address</p>" }] });
-  const g = gradeWrite(spec, flat);
+  assert.equal(gradeWrite(spec, flat).task_success, false);
+  const unrelated = reader({
+    todoItems: [todo("Review contract")],
+    comments: () => [{ id: "c", text: "<ul><li>Add the late fee clause</li><li>Call the client</li><li>Archive the draft</li></ul>" }],
+  });
+  const g = gradeWrite(spec, unrelated);
   assert.equal(g.task_success, false);
-  assert.match(g.details, /0 list items/);
+  assert.match(g.details, /Fix the payment date/);
 });
 
 test("todo_comment none_on fails a reply posted on the same-titled to-do in another list", () => {
@@ -171,13 +180,22 @@ test("comment_attachment needs the file attached inside the comment", () => {
   assert.deepEqual(attachmentNames(withFile), ["punch-list.txt"]);
 });
 
-test("todo_absent passes only while the trashed to-do stays gone", () => {
-  const spec = { check: "todo_absent", title: "Pay hosting bill", still_open: ["Renew domain"] };
-  assert.equal(gradeWrite(spec, reader({ todoItems: [todo("Renew domain")] })).task_success, true);
-  const recreated = gradeWrite(spec, reader({ todoItems: [todo("Renew domain"), todo("Pay hosting bill", { completed: true })] }));
+test("todo_absent passes only while the seeded to-do remains untouched in trash", () => {
+  const spec = { check: "todo_absent", list: "Bench Sprint", title: "Pay hosting bill", still_open: ["Renew domain"] };
+  const initial: RecordingState = { id: "host", status: "trashed", completed: false, updated_at: "seeded" };
+  const context = { initialRecordings: new Map([["Bench Sprint/Pay hosting bill", initial]]) };
+  assert.equal(gradeWrite(spec, reader({ todoItems: [todo("Renew domain")] }), context).task_success, true);
+  const recreated = gradeWrite(spec, reader({ todoItems: [todo("Renew domain"), todo("Pay hosting bill", { completed: true })] }), context);
   assert.equal(recreated.task_success, false);
   assert.match(recreated.details, /restored or recreated/);
-  assert.equal(gradeWrite(spec, reader({ todoItems: [todo("Renew domain", { completed: true })] })).task_success, false);
+  const retrash = reader({
+    todoItems: [todo("Renew domain")],
+    recording: () => ({ ...initial, completed: true, updated_at: "restored-and-retrashed" }),
+  });
+  const changed = gradeWrite(spec, retrash, context);
+  assert.equal(changed.task_success, false);
+  assert.match(changed.details, /changed after seeding/);
+  assert.equal(gradeWrite(spec, reader({ todoItems: [todo("Renew domain", { completed: true })] }), context).task_success, false);
 });
 
 test("subtask_completed needs the one subtask done and the rest open", () => {

@@ -87,7 +87,9 @@ export function markdownReport(results?: RunResult[], coverage: ReadonlySet<stri
   const all = results ?? loadResults();
   if (all.length === 0) return "No results found.\n";
 
-  const summaries = summarize(all);
+  const realism = all.filter((r) => !coverage.has(r.task));
+  const coverageRuns = all.filter((r) => coverage.has(r.task));
+  const summaries = summarize(realism);
   const lines: string[] = [];
 
   // Summary table
@@ -104,6 +106,11 @@ export function markdownReport(results?: RunResult[], coverage: ReadonlySet<stri
     lines.push(
       `| ${s.condition} | ${s.total_tasks} | ${s.avg_input_tokens} | ${(s.avg_cached_pct * 100).toFixed(0)}% | ${s.avg_output_tokens} | $${s.avg_cost_usd.toFixed(4)} | $${s.total_cost_usd.toFixed(2)} | ${s.avg_duration_seconds.toFixed(1)}s | ${s.avg_turns} | ${(s.success_rate * 100).toFixed(0)}% |`,
     );
+  }
+  if (coverageRuns.length) {
+    const tasks = new Set(coverageRuns.map((r) => r.task)).size;
+    const successes = coverageRuns.filter((r) => r.grade.task_success).length;
+    lines.push(`\nCoverage: ${tasks} task${tasks === 1 ? "" : "s"}, ${successes}/${coverageRuns.length} runs successful.`);
   }
 
   // Per-task breakdown
@@ -138,12 +145,12 @@ export function markdownReport(results?: RunResult[], coverage: ReadonlySet<stri
   return lines.join("\n") + "\n";
 }
 
-export function csvReport(results?: RunResult[]): string {
+export function csvReport(results?: RunResult[], coverage: ReadonlySet<string> = new Set()): string {
   const all = results ?? loadResults();
   if (all.length === 0) return "";
 
   const headers = [
-    "condition", "task", "run", "model", "timestamp",
+    "condition", "task", "coverage", "run", "model", "timestamp",
     "success", "input_tokens", "input_tokens_cached", "output_tokens",
     "reasoning_tokens", "total_cost_usd", "wall_clock_seconds",
     "turn_count", "command_count", "error_count",
@@ -153,7 +160,7 @@ export function csvReport(results?: RunResult[]): string {
   for (const r of all) {
     lines.push(
       [
-        r.condition, r.task, r.run, r.model, r.timestamp,
+        r.condition, r.task, coverage.has(r.task), r.run, r.model, r.timestamp,
         r.grade.task_success, r.usage.input_tokens, r.usage.input_tokens_cached,
         r.usage.output_tokens, r.usage.reasoning_tokens, r.usage.total_cost_usd,
         r.usage.wall_clock_seconds, r.usage.turn_count, r.usage.command_count,
@@ -188,7 +195,7 @@ export function writeReports(suite: Suite = "read", coverage: ReadonlySet<string
   const probesPath = join(dir, "probes.json");
   const probes = existsSync(probesPath) ? (JSON.parse(readFileSync(probesPath, "utf-8")) as ProbeResult[]) : [];
   const md = markdownReport(results, coverage) + (probes.length ? "\n" + probesReport(probes) : "");
-  const csv = csvReport(results);
+  const csv = csvReport(results, coverage);
   writeFileSync(join(dir, "report.md"), md);
   writeFileSync(join(dir, "report.csv"), csv);
   console.log(md);

@@ -234,11 +234,11 @@ async function update(args: string[], ctx: CliContext | undefined): Promise<stri
   if (to) bcArgs.push("--assignee", to);
   if (due) bcArgs.push("--due", due);
   if (bcArgs.length === 3) throw new AxiError("Nothing to update", "VALIDATION_ERROR", ["Pass at least one of --title, --body, --to, --due"]);
-  const current = await bc<Row>(["cards", "show", id], { project, account: ctx?.account }).catch(() => undefined);
-  if (current?.data?.status === "trashed") throw trashedError(current.data.id ?? id, "Card", project.value);
+  const current = await bc<Row>(["cards", "show", id], { project, account: ctx?.account });
+  if (current.data.status === "trashed") throw trashedError(current.data.id ?? id, "Card", project.value);
   // The basecamp CLI re-sends the whole card on update and drops the due date when --due is
   // omitted, so carry the current value forward unless the caller is changing it.
-  if (!due && current?.data.due_on) bcArgs.push("--due", String(current.data.due_on));
+  if (!due && current.data.due_on) bcArgs.push("--due", String(current.data.due_on));
   const result = await bc<Row>(bcArgs, { project, account: ctx?.account });
   return renderDetail("updated", result.data ?? { id }, {
     id: (x) => x.id,
@@ -257,8 +257,8 @@ async function move(args: string[], ctx: CliContext | undefined): Promise<string
   const onHold = bool(parsed, "--on-hold");
   if (!to && !onHold) throw new AxiError("--to <column> or --on-hold is required", "VALIDATION_ERROR", [`Run \`basecamp-axi card columns${projectFlag(ctx)}\` to find columns`]);
   // Moving a trashed card silently restores it to the board, so stop first.
-  const before = await bc<Row>(["cards", "show", id], { project, account: ctx?.account }).catch(() => undefined);
-  if (before?.data?.status === "trashed") throw trashedError(before.data.id ?? id, "Card", project.value);
+  const before = await bc<Row>(["cards", "show", id], { project, account: ctx?.account });
+  if (before.data.status === "trashed") throw trashedError(before.data.id ?? id, "Card", project.value);
   const bcArgs = ["cards", "move", id, ...tableArgs(parsed)];
   if (to) bcArgs.push("--to", to);
   if (onHold) bcArgs.push("--on-hold");

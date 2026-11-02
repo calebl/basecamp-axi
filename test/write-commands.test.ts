@@ -60,6 +60,13 @@ test("todo done on a trashed to-do fails fast with TRASHED before any write", ()
   assert.match(stdout, /To-do 123 is in the trash/);
 });
 
+test("todo done stops when any preflight read fails", () => {
+  const failed = { ok: false, error: "Temporary read failure", code: "api_error" };
+  const { status, calls } = run(["todo", "done", "123"], { "todos show": failed });
+  assert.equal(status, 1);
+  assert.deepEqual(verbs(calls), ["todos show"]);
+});
+
 test("todo view shows a trashed to-do as trashed and offers no write hints", () => {
   const { stdout } = run(["todo", "view", "123"], { "todos show": trashedTodo });
   assert.match(stdout, /status: trashed/);
@@ -76,6 +83,16 @@ test("card move and update on a trashed card fail fast", () => {
   const update = run(["card", "update", "321", "--title", "New", "--in", "99"], { "cards show": trashedCard });
   assert.equal(update.status, 1);
   assert.ok(!verbs(update.calls).includes("cards update"));
+});
+
+test("card move and update stop when their preflight read fails", () => {
+  const failed = { ok: false, error: "Temporary read failure", code: "api_error" };
+  const move = run(["card", "move", "321", "--to", "777", "--in", "99"], { "cards show": failed });
+  assert.equal(move.status, 1);
+  assert.deepEqual(verbs(move.calls), ["cards show"]);
+  const update = run(["card", "update", "321", "--title", "New", "--in", "99"], { "cards show": failed });
+  assert.equal(update.status, 1);
+  assert.deepEqual(verbs(update.calls), ["cards show"]);
 });
 
 test("comment on a trashed item maps to TRASHED", () => {

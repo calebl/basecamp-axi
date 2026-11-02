@@ -24,6 +24,7 @@ export interface Sandbox {
 
 // Normalised shapes the write grader reads. Kept flat so checks can be unit-tested.
 export interface TodoItem { id: string; title: string; completed: boolean; assignees: string[]; due_on: string | null }
+export interface RecordingState { id: string; status: string; completed: boolean; updated_at: string }
 export interface SubtaskItem { id: string; title: string; completed: boolean }
 /** `text` is the comment's raw HTML, so checks can see lists and attachments. */
 export interface CommentItem { id: string; text: string }
@@ -39,6 +40,7 @@ export interface BasecampReader {
   meEmail(): string;
   todolists(): { id: string; name: string }[];
   todos(listId: string): TodoItem[];
+  recording(id: string): RecordingState;
   subtasks(todoId: string): SubtaskItem[];
   comments(recordingId: string): CommentItem[];
   /** Cards on one table: the default table when `table` is omitted or "default", else an extra table by title. */
@@ -301,6 +303,17 @@ export function seedSandbox(sb: Sandbox, seed: SeedSpec | undefined): Map<string
   return ids;
 }
 
+function readRecordingState(sb: Sandbox, id: string): RecordingState {
+  const rec = bc(sb.def, ["show", id, "--in", sb.projectId]) as Json;
+  guard(sb, rec);
+  return {
+    id: String(rec.id),
+    status: String(rec.status ?? "unknown"),
+    completed: Boolean(rec.completed),
+    updated_at: String(rec.updated_at ?? ""),
+  };
+}
+
 /** Live reader over the sandbox project, used by the write grader. */
 export function sandboxReader(sb: Sandbox): BasecampReader {
   const { def, projectId: p } = sb;
@@ -320,6 +333,7 @@ export function sandboxReader(sb: Sandbox): BasecampReader {
       ...list(bc(def, ["todos", "list", "--list", listId, "--in", p, "--all"])),
       ...list(bc(def, ["todos", "list", "--list", listId, "--in", p, "--all", "--completed"])),
     ].map(toTodo),
+    recording: (id) => readRecordingState(sb, id),
     subtasks: (todoId) =>
       list(bc(def, ["subtasks", "list", todoId, "--all"])).map((s) => ({
         id: String(s.id),
@@ -384,9 +398,7 @@ export function sandboxReader(sb: Sandbox): BasecampReader {
 
 /** Status of one recording ("active", "trashed", ...), read straight from the API. */
 export function recordingStatus(sb: Sandbox, id: string): string {
-  const rec = bc(sb.def, ["show", id, "--in", sb.projectId]) as Json;
-  guard(sb, rec);
-  return String(rec.status ?? "unknown");
+  return readRecordingState(sb, id).status;
 }
 
 /** Run a probe command with the sandbox credentials; never through a shell. */

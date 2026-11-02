@@ -20,7 +20,7 @@ import { parseCodexJsonl, parseClaudeJsonl } from "./usage.ts";
 import { grade } from "./grader.ts";
 import { gradeWrite } from "./write-grader.ts";
 import { resultsDir } from "./reporter.ts";
-import { type Sandbox, resetSandbox, seedSandbox, sandboxEnv, sandboxReader } from "./sandbox.ts";
+import { type RecordingState, type Sandbox, resetSandbox, seedSandbox, sandboxEnv, sandboxReader } from "./sandbox.ts";
 
 
 const BENCH_ROOT = resolve(import.meta.dirname, "..");
@@ -101,10 +101,21 @@ export function runOne(
 
     let prompt = task.prompt;
     let env: NodeJS.ProcessEnv = { ...process.env, PATH: agentPath() };
+    const initialRecordings = new Map<string, RecordingState>();
     if (sandbox) {
       resetSandbox(sandbox);
       const seeded = seedSandbox(sandbox, task.seed);
       prompt = fillPrompt(prompt, sandbox.projectId, seeded);
+      const reader = sandboxReader(sandbox);
+      for (const list of task.seed?.todolists ?? []) {
+        for (const entry of list.todos ?? []) {
+          if (typeof entry === "string" || !entry.trashed) continue;
+          const key = `${list.name}/${entry.title}`;
+          const id = seeded.get(key);
+          if (!id) throw new Error(`No seeded id for trashed to-do "${key}".`);
+          initialRecordings.set(key, reader.recording(id));
+        }
+      }
       env = { ...sandboxEnv(sandbox.def), PATH: env.PATH };
     }
 
@@ -133,7 +144,7 @@ export function runOne(
 
     // 5. Grade — write tasks read the sandbox back; read tasks pass raw JSONL so the judge sees the full trajectory
     const gradeResult = sandbox
-      ? gradeWrite(task.grading, sandboxReader(sandbox))
+      ? gradeWrite(task.grading, sandboxReader(sandbox), { initialRecordings })
       : grade(task.grading, task.prompt, agentOutput, agent, artifactDir);
     writeFileSync(join(artifactDir, "grade.json"), JSON.stringify(gradeResult, null, 2));
 

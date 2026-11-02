@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { fillPrompt, mergeUsage } from "../src/runner.ts";
-import { markdownReport, probesReport } from "../src/reporter.ts";
+import { csvReport, markdownReport, probesReport } from "../src/reporter.ts";
 import type { RunResult, UsageMetrics } from "../src/types.ts";
 
 const usage = (n: number): UsageMetrics => ({
@@ -38,14 +38,22 @@ test("fillPrompt fills the project and seeded to-do links, and rejects unknown l
   assert.throws(() => fillPrompt("Reply on {url:Bathroom/Pick paint color}", "9", seeded), /Bathroom\/Pick paint color/);
 });
 
-test("markdownReport labels coverage tasks", () => {
-  const result = (task: string): RunResult => ({
-    condition: "axi", task, run: 1, model: "m", timestamp: "t", usage: usage(1),
+test("reports separate coverage from realism", () => {
+  const result = (task: string, scale = 1): RunResult => ({
+    condition: "axi", task, run: 1, model: "m", timestamp: "t", usage: usage(scale),
     grade: { task_success: true, details: "" }, agent_output: "",
   });
-  const md = markdownReport([result("hill_update"), result("todo_create")], new Set(["hill_update"]));
+  const coverage = new Set(["hill_update"]);
+  const results = [result("hill_update", 9), result("todo_create")];
+  const md = markdownReport(results, coverage);
+  assert.match(md, /\| axi \| 1 \| 100 \| 50% .* \$0\.0100 \| \$0\.01 \| 1\.0s/);
+  assert.match(md, /Coverage: 1 task, 1\/1 runs successful/);
   assert.match(md, /### hill_update \(coverage\)/);
   assert.match(md, /### todo_create\n/);
   assert.match(md, /not a measure of realistic use/);
-  assert.doesNotMatch(markdownReport([result("todo_create")], new Set(["hill_update"])), /coverage/);
+  assert.doesNotMatch(markdownReport([result("todo_create")], coverage), /coverage/i);
+  const csv = csvReport(results, coverage).trim().split("\n");
+  assert.equal(csv[0].split(",")[2], "coverage");
+  assert.equal(csv[1].split(",")[2], "true");
+  assert.equal(csv[2].split(",")[2], "false");
 });

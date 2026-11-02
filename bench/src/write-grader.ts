@@ -8,10 +8,13 @@
  */
 
 import type { GradeResult, GradingSpec } from "./types.ts";
-import type { BasecampReader, TodoItem } from "./sandbox.ts";
+import type { BasecampReader, RecordingState, TodoItem } from "./sandbox.ts";
 
 type Params = Record<string, unknown>;
-type Check = (r: BasecampReader, p: Params) => GradeResult;
+export interface GradeContext {
+  initialRecordings?: ReadonlyMap<string, RecordingState>;
+}
+type Check = (r: BasecampReader, p: Params, context: GradeContext) => GradeResult;
 
 const ENTITIES: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', nbsp: " ", "#39": "'", apos: "'" };
 
@@ -130,8 +133,8 @@ export const CHECKS: Record<string, Check> = {
   },
 
   /**
-   * One comment containing the text sits on the named to-do. Optional: `list_items`, the number of
-   * <li> items that comment must hold (a Markdown list arrived as a list), and `none_on`, other
+   * One comment containing the text sits on the named to-do. Optional: `list_items`, the exact
+   * <li> item texts that comment must hold (a Markdown list arrived intact), and `none_on`, other
    * to-dos ({ list, title }) that must have no comment containing the text.
    */
   todo_comment(r, p) {
@@ -143,9 +146,10 @@ export const CHECKS: Record<string, Check> = {
     if (!found.task_success) return found;
     if (p.list_items !== undefined) {
       const comment = comments.find((t) => norm(t).includes(norm(needle)))!;
-      const items = (comment.match(/<li[\s>]/gi) ?? []).length;
-      if (items !== Number(p.list_items)) {
-        return fail(`The comment holds ${items} list items, expected ${Number(p.list_items)}; the Markdown list did not arrive as a list.`);
+      const items = [...comment.matchAll(/<li\b[^>]*>([\s\S]*?)<\/li>/gi)].map((m) => norm(m[1]));
+      const expected = strs(p, "list_items");
+      if (!sameSet(items, expected)) {
+        return fail(`The comment list is [${quoted(items)}], expected [${quoted(expected)}]; the Markdown list did not arrive intact.`);
       }
     }
     for (const other of targets(p, "none_on")) {
@@ -224,7 +228,14 @@ export const CHECKS: Record<string, Check> = {
    * No active to-do titled `title` exists in any list (the seeded one stays in the trash, and no
    * copy was made), and each `still_open` to-do is still open.
    */
-  todo_absent(r, p) {
+  todo_absent(r, p, context) {
+    const key = `${str(p, "list")}/${str(p, "title")}`;
+    const initial = context.initialRecordings?.get(key);
+    if (!initial) return fail(`No initial state was captured for seeded to-do "${key}".`);
+    const seeded = r.recording(initial.id);
+    if (seeded.status !== initial.status || seeded.completed !== initial.completed || seeded.updated_at !== initial.updated_at) {
+      return fail(`Seeded to-do "${str(p, "title")}" changed after seeding; it was restored or otherwise acted on.`);
+    }
     const all = r.todolists().flatMap((l) => r.todos(l.id).map((t) => ({ ...t, list: l.name })));
     const hits = all.filter((t) => norm(t.title) === norm(str(p, "title")));
     if (hits.length) {
@@ -340,11 +351,11 @@ export const CHECKS: Record<string, Check> = {
   },
 };
 
-export function gradeWrite(spec: GradingSpec, reader: BasecampReader): GradeResult {
+export function gradeWrite(spec: GradingSpec, reader: BasecampReader, context: GradeContext = {}): GradeResult {
   const check = spec.check ? CHECKS[spec.check] : undefined;
   if (!check) return fail(`Unknown write check "${spec.check}".`);
   try {
-    return check(reader, spec);
+    return check(reader, spec, context);
   } catch (err) {
     return fail(`Could not read Basecamp state: ${(err as Error).message}`);
   }

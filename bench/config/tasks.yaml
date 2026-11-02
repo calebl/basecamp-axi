@@ -270,7 +270,10 @@ tasks:
       list: Bench Sprint
       title: Review contract
       contains: "Add the late fee clause"
-      list_items: 3
+      list_items:
+        - "Fix the payment date"
+        - "Add the late fee clause"
+        - "Correct the site address"
 
   reply_by_url:
     suite: write
@@ -530,5 +533,6 @@ tasks:
             - { title: "Pay hosting bill", trashed: true }
     grading:
       check: todo_absent
+      list: Bench Sprint
       title: Pay hosting bill
       still_open: ["Renew domain"]

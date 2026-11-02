@@ -222,22 +222,21 @@ async function toggle(args: string[], ctx: CliContext | undefined, action: "done
   const ids = parsed.positionals.flatMap((p) => p.split(",")).filter(Boolean);
   // Read every todo before changing any, so a trashed one stops the command before a partial write.
   // Basecamp accepts a completion on a trashed todo and reports success without completing it.
-  const befores: (BasecampResult<Row> | undefined)[] = [];
+  const befores: { id: string; before: BasecampResult<Row> }[] = [];
   for (const id of ids) {
-    const before = await bc<Row>(["todos", "show", id], { project: ctx?.project, account: ctx?.account }).catch(() => undefined);
-    if (before?.data?.status === "trashed") throw trashedError(before.data.id ?? id, "To-do", before.data.bucket?.id);
-    befores.push(before);
+    const before = await bc<Row>(["todos", "show", id], { project: ctx?.project, account: ctx?.account });
+    if (before.data.status === "trashed") throw trashedError(before.data.id ?? id, "To-do", before.data.bucket?.id);
+    befores.push({ id, before });
   }
   const rows: Row[] = [];
-  for (const [i, id] of ids.entries()) {
-    const before = befores[i];
+  for (const { id, before } of befores) {
     const wantCompleted = action === "done";
-    if (before && Boolean(before.data.completed) === wantCompleted) {
+    if (Boolean(before.data.completed) === wantCompleted) {
       rows.push({ id: before.data.id, title: before.data.title ?? before.data.content, result: `already ${wantCompleted ? "done" : "open"} (no-op)` });
       continue;
     }
     await bc(["todos", action === "done" ? "complete" : "uncomplete", id], { project: ctx?.project, account: ctx?.account });
-    rows.push({ id: before?.data.id ?? numeric(id), title: before?.data.title ?? before?.data.content ?? "?", result: wantCompleted ? "completed" : "reopened" });
+    rows.push({ id: before.data.id ?? numeric(id), title: before.data.title ?? before.data.content ?? "?", result: wantCompleted ? "completed" : "reopened" });
   }
   return renderOutput([
     renderList("todos", rows, { id: (r) => r.id, title: (r) => r.title, result: (r) => r.result }),
