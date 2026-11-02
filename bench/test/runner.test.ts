@@ -1,7 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { fillPrompt, mergeUsage } from "../src/runner.ts";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { type AxiBuild, agentEnv, fillPrompt, mergeUsage, parsePreflight, preflightAxiBuild } from "../src/runner.ts";
+import { gradeFromJudgeOutput } from "../src/grader.ts";
 import { csvReport, markdownReport, probesReport } from "../src/reporter.ts";
 import type { RunResult, UsageMetrics } from "../src/types.ts";
 
@@ -56,4 +61,55 @@ test("reports separate coverage from realism", () => {
   assert.equal(csv[0].split(",")[2], "coverage");
   assert.equal(csv[1].split(",")[2], "true");
   assert.equal(csv[2].split(",")[2], "false");
+});
+
+test("parsePreflight passes only when the shell resolves to the shim", () => {
+  const shim = "/repo/bench/results/.bin/basecamp-axi";
+  const ok = parsePreflight(JSON.stringify({ result: "```\n" + shim + "\n```", total_cost_usd: 0.002 }), shim);
+  assert.equal(ok.ok, true);
+  assert.equal(ok.cost_usd, 0.002);
+  const global = parsePreflight(JSON.stringify({ result: "/home/u/.local/share/mise/installs/npm-basecamp-axi/latest/bin/basecamp-axi" }), shim);
+  assert.equal(global.ok, false);
+  assert.match(global.resolved, /mise/);
+  assert.equal(parsePreflight("", shim).ok, false);
+});
+
+/** A temporary checkout layout: a dist build and the shim directory beside it. */
+function tempBuild(): AxiBuild {
+  const root = mkdtempSync(join(tmpdir(), "bench-build-"));
+  const built = join(root, "dist", "basecamp-axi.js");
+  mkdirSync(join(root, "dist"));
+  writeFileSync(built, "");
+  return { built, shimDir: join(root, ".bin") };
+}
+
+test("agentEnv re-applies the shim after the shell profile through CLAUDE_ENV_FILE", () => {
+  const build = tempBuild();
+  const env = agentEnv({ PATH: "/usr/bin" }, build);
+  assert.equal(env.PATH?.split(":")[0], build.shimDir);
+  assert.ok(env.CLAUDE_ENV_FILE);
+  assert.equal(readFileSync(env.CLAUDE_ENV_FILE, "utf-8"), `export PATH='${build.shimDir}':"$PATH"\n`);
+});
+
+test("a shim left after dist/ is deleted is removed and fails the preflight before any session", () => {
+  const build = tempBuild();
+  agentEnv({ PATH: "/usr/bin" }, build);
+  assert.ok(existsSync(join(build.shimDir, "basecamp-axi")));
+  rmSync(build.built);
+  // Throws before spawning claude, so no paid session runs.
+  assert.throws(() => preflightAxiBuild({ PATH: "/usr/bin" }, build), /run `npm run build`/);
+  assert.equal(existsSync(join(build.shimDir, "basecamp-axi")), false);
+  assert.equal(existsSync(join(build.shimDir, "env.sh")), false);
+  const env = agentEnv({ PATH: "/usr/bin" }, build);
+  assert.equal(env.CLAUDE_ENV_FILE, undefined);
+});
+
+test("judge spend is kept when the verdict cannot be read", () => {
+  const unreadable = gradeFromJudgeOutput(JSON.stringify({ result: "I am not sure.", total_cost_usd: 0.012 }), "claude");
+  assert.equal(unreadable.result.task_success, false);
+  assert.match(unreadable.result.details, /Could not parse judge verdict/);
+  assert.equal(unreadable.result.judge_cost_usd, 0.012);
+  const ok = gradeFromJudgeOutput(JSON.stringify({ result: '{"pass": true, "reason": "fine"}', total_cost_usd: 0.01 }), "claude");
+  assert.deepEqual(ok.result, { task_success: true, details: "fine", judge_cost_usd: 0.01 });
+  assert.equal(gradeFromJudgeOutput('{"pass": false, "reason": "no"}', "codex").result.judge_cost_usd, undefined);
 });

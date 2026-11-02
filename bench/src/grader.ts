@@ -154,13 +154,40 @@ export function grade(
   judgeBackend: AgentBackend = "codex",
   artifactDir?: string,
 ): GradeResult {
+  const judged = judge(spec, taskPrompt, rawJsonl, judgeBackend);
+  if (artifactDir) writeJudgeArtifacts(artifactDir, judged);
+  return judged.result;
+}
+
+export interface Judged {
+  result: GradeResult;
+  /** The judge's answer text; undefined when the judge process produced no output. */
+  text?: string;
+  model: string;
+}
+
+/** Save the judge's answer and model next to a run's other artifacts, for auditability. */
+export function writeJudgeArtifacts(artifactDir: string, judged: Judged): void {
+  if (judged.text === undefined) return;
+  writeFileSync(`${artifactDir}/judge_output.txt`, judged.text);
+  writeFileSync(`${artifactDir}/judge_model.txt`, judged.model);
+}
+
+/** Run the LLM judge on one trajectory without writing anything. */
+export function judge(
+  spec: GradingSpec,
+  taskPrompt: string,
+  rawJsonl: string,
+  judgeBackend: AgentBackend = "codex",
+): Judged {
+  const model = judgeBackend === "claude" ? CLAUDE_JUDGE_MODEL : CODEX_JUDGE_MODEL;
   const trajectory = formatTrajectory(rawJsonl);
   const prompt = buildGradingPrompt(taskPrompt, trajectory, spec.grading_hint);
 
   let judgeOutput: string;
   try {
     const { cmd, args } = judgeBackend === "claude"
-      ? { cmd: "claude", args: ["--setting-sources", "", "-p", prompt, "--model", CLAUDE_JUDGE_MODEL, "--output-format", "text", "--max-turns", "1", "--tools", "", "--no-session-persistence"] }
+      ? { cmd: "claude", args: ["--setting-sources", "", "-p", prompt, "--model", CLAUDE_JUDGE_MODEL, "--output-format", "json", "--max-turns", "1", "--tools", "", "--no-session-persistence"] }
       : { cmd: "codex", args: ["exec", "--json", "--model", CODEX_JUDGE_MODEL, "--ephemeral", prompt] };
     judgeOutput = execFileSync(
       cmd,
@@ -176,34 +203,47 @@ export function grade(
     judgeOutput = execErr.stdout ?? "";
     if (!judgeOutput) {
       return {
-        task_success: false,
-        details: `Judge process failed: ${execErr.stderr ?? "unknown error"}`,
+        result: { task_success: false, details: `Judge process failed: ${execErr.stderr ?? "unknown error"}` },
+        model,
       };
     }
   }
 
-  // Save judge trajectory for auditability
-  if (artifactDir) {
-    const judgeModel = judgeBackend === "claude" ? CLAUDE_JUDGE_MODEL : CODEX_JUDGE_MODEL;
-    writeFileSync(`${artifactDir}/judge_output.txt`, judgeOutput);
-    writeFileSync(`${artifactDir}/judge_model.txt`, judgeModel);
+  const { text, result } = gradeFromJudgeOutput(judgeOutput, judgeBackend);
+  return { result, text, model };
+}
+
+/**
+ * Turn the judge's raw output into a grade. The claude judge answers with a
+ * JSON envelope: its text in `result`, its spend in `total_cost_usd`. The
+ * spend is kept on every outcome, including an unreadable verdict, so paid
+ * judge calls are always counted.
+ */
+export function gradeFromJudgeOutput(output: string, judgeBackend: AgentBackend): { text: string; result: GradeResult } {
+  let text = output;
+  let judgeCost: number | undefined;
+  if (judgeBackend === "claude") {
+    try {
+      const doc = JSON.parse(output) as { result?: string; total_cost_usd?: number };
+      judgeCost = doc.total_cost_usd;
+      text = doc.result ?? output;
+    } catch {
+      // Not an envelope; parse the verdict from the raw text below.
+    }
   }
+  const cost = judgeCost !== undefined ? { judge_cost_usd: judgeCost } : {};
 
   // Extract the judge's JSON verdict from its output.
   // The judge may wrap its response in JSONL events, so we search for the
   // {"pass": ...} object in either raw text or JSONL message content.
-  const verdict = extractVerdict(judgeOutput);
+  const verdict = extractVerdict(text);
   if (!verdict) {
     return {
-      task_success: false,
-      details: `Could not parse judge verdict from output: ${judgeOutput.slice(0, 500)}`,
+      text,
+      result: { task_success: false, details: `Could not parse judge verdict from output: ${text.slice(0, 500)}`, ...cost },
     };
   }
-
-  return {
-    task_success: verdict.pass,
-    details: verdict.reason,
-  };
+  return { text, result: { task_success: verdict.pass, details: verdict.reason, ...cost } };
 }
 
 interface JudgeVerdict {

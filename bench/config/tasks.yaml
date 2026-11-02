@@ -2,7 +2,7 @@
 #
 # Read suite (default): read-only against the Construct-Ease Basecamp account.
 # Grading uses an LLM judge that reads the full trajectory. grading_hint holds
-# ground truth captured on 2026-10-23 (first set 2026-09-11); refresh it if the account changes.
+# ground truth refreshed on 2026-11-02 (earlier 2026-10-23, first set 2026-09-11); refresh it if the account changes.
 #
 # Write suite (suite: write, run with --suite write): every task runs in the
 # sandbox project from sandbox.yaml, which is emptied and then given the task's
@@ -19,7 +19,7 @@ tasks:
     prompt: >
       How many projects are in this Basecamp account? Report the exact number.
     grading:
-      grading_hint: "The account has 40 active projects. Reporting the size of a truncated first page (for example 10 or 15) is a failure."
+      grading_hint: "The account has 41 active projects. Reporting the size of a truncated first page (for example 10 or 15) is a failure."
 
   todolist_progress:
     category: single_step
@@ -54,7 +54,7 @@ tasks:
       and how many of them are overdue? Report the count of open items, the count
       that are overdue, and the title of any overdue item.
     grading:
-      grading_hint: "Caleb LeNoir has 5-6 open to-dos and 1 card ('Set up Gilfoyle's new machine ...') across several projects; the assignments report also lists 24 card steps, so a total of 6, 7 or 30 is correct when the agent says what it counted. None of them has a due date, so 0 are overdue. Reporting any item as overdue, or missing the card, is a failure."
+      grading_hint: "Caleb LeNoir's assignments list has 7 top-level items across several projects, but 2 of them are already completed parents (the to-do 'Fitz setup' and the card '#2203 Remove stale staging-branch references') that still hold open assigned subtasks or card steps. That leaves 5 open top-level items: 3 to-dos and 2 cards ('Review the Scott integration design', 'F3: A common admin role can read and control every tenant's background jobs'). Counting the open assigned subtasks and card steps as well gives 12 open items (10 to-dos, subtasks or steps, and 2 cards). A total of 5, 12, or another total the agent explains by what it counted is correct; counting a completed parent as open is not. None of them has a due date, so 0 are overdue. Reporting any item as overdue, or missing the cards, is a failure."
 
   recording_by_id:
     category: multi_step
@@ -95,7 +95,7 @@ tasks:
       report the most recent update's id, author, time, note, and every dot's
       to-do list name and position.
     grading:
-      grading_hint: "The answer must report the most recent hill chart progress update with its id, author, time, note, and every dot's list name and numeric position. Ground truth must be captured from account 6068025 immediately before the next benchmark run and this note replaced with those exact values."
+      grading_hint: "Captured read-only on 2026-11-02: project 48189809's hill chart has no progress updates and no to-do lists tracked on it. The correct answer says there are no progress updates (and so no dots to report). Inventing an update, an author, a note or dot positions is a failure."
 
   # ── Category C: Error recovery ─────────────────────────────────
 

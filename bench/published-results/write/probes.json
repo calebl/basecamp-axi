@@ -26,5 +26,19 @@
     "exit_code": 0,
     "passed": true,
     "details": "second run exit 0, still completed, reported as a no-op"
+  },
+  {
+    "condition": "cli",
+    "probe": "trashed_complete",
+    "exit_code": 0,
+    "passed": false,
+    "details": "reported success on a trashed to-do (item still trashed)"
+  },
+  {
+    "condition": "axi",
+    "probe": "trashed_complete",
+    "exit_code": 1,
+    "passed": true,
+    "details": "refused with a trashed error (exit 1)"
   }
 ]
