@@ -26,6 +26,8 @@ import { type RecordingState, type Sandbox, resetSandbox, seedSandbox, sandboxEn
 const BENCH_ROOT = resolve(import.meta.dirname, "..");
 const REPO_ROOT = resolve(BENCH_ROOT, "..");
 
+const SHIM_DIR = join(BENCH_ROOT, "results", ".bin");
+
 /**
  * Put this checkout's basecamp-axi build first on PATH so the axi condition
  * measures the code under test rather than whatever is installed globally.
@@ -34,12 +36,85 @@ const REPO_ROOT = resolve(BENCH_ROOT, "..");
 export function agentPath(): string {
   const built = join(REPO_ROOT, "dist", "bin", "basecamp-axi.js");
   if (!existsSync(built)) return process.env.PATH ?? "";
-  const shimDir = join(BENCH_ROOT, "results", ".bin");
-  mkdirSync(shimDir, { recursive: true });
-  const shim = join(shimDir, "basecamp-axi");
+  mkdirSync(SHIM_DIR, { recursive: true });
+  const shim = join(SHIM_DIR, "basecamp-axi");
   writeFileSync(shim, `#!/bin/sh\nexec node "${built}" "$@"\n`);
   chmodSync(shim, 0o755);
-  return [shimDir, process.env.PATH ?? ""].join(delimiter);
+  return [SHIM_DIR, process.env.PATH ?? ""].join(delimiter);
+}
+
+/**
+ * Environment for an agent session. PATH alone is not enough for Claude Code:
+ * its Bash tool sources the user's shell profile, and a version manager there
+ * (mise activate, for one) moves a globally installed basecamp-axi back ahead
+ * of the shim. CLAUDE_ENV_FILE is sourced after the profile before every
+ * command, so it puts the shim first again.
+ */
+export function agentEnv(base: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const path = agentPath();
+  if (!existsSync(join(SHIM_DIR, "basecamp-axi"))) return { ...base, PATH: path };
+  const envFile = join(SHIM_DIR, "env.sh");
+  writeFileSync(envFile, `export PATH=${shellQuote(SHIM_DIR)}:"$PATH"\n`);
+  return { ...base, PATH: path, CLAUDE_ENV_FILE: envFile };
+}
+
+function shellQuote(s: string): string {
+  return `'${s.replaceAll("'", `'\\''`)}'`;
+}
+
+export interface PreflightResult {
+  ok: boolean;
+  resolved: string;
+  cost_usd: number;
+}
+
+/**
+ * Before any axi session, check in a real Claude Code shell that `basecamp-axi`
+ * resolves to this checkout's shim, not a global install. A run that skipped
+ * this measured basecamp-axi 0.2.0 while the checkout held 0.3.0. One short
+ * session on a small model (BENCH_PREFLIGHT_MODEL) costs well under a cent.
+ */
+export function preflightAxiBuild(base: NodeJS.ProcessEnv = process.env): PreflightResult {
+  const shim = join(SHIM_DIR, "basecamp-axi");
+  const env = { ...agentEnv(base), ENABLE_CLAUDEAI_MCP_SERVERS: "false" };
+  if (!existsSync(shim)) {
+    throw new Error("No basecamp-axi build to benchmark: run `npm run build` in the repository root first.");
+  }
+  const workspace = join(BENCH_ROOT, "results", "preflight");
+  rmSync(workspace, { recursive: true, force: true });
+  mkdirSync(workspace, { recursive: true });
+  let out = "";
+  try {
+    out = execFileSync("claude", [
+      "--setting-sources", "",
+      "-p", "Run this exact Bash command once, then reply with only its output: command -v basecamp-axi",
+      "--model", process.env.BENCH_PREFLIGHT_MODEL ?? "claude-haiku-5-5",
+      "--output-format", "json",
+      "--no-session-persistence", "--disable-slash-commands", "--strict-mcp-config",
+      "--max-turns", "3",
+      "--permission-mode", "dontAsk", "--allowedTools", "Bash(command:*)",
+    ], { encoding: "utf-8", env, cwd: workspace, timeout: 2 * 60 * 1000, stdio: ["pipe", "pipe", "pipe"] });
+  } catch (err: unknown) {
+    out = (err as { stdout?: string }).stdout ?? "";
+  } finally {
+    rmSync(workspace, { recursive: true, force: true });
+  }
+  return parsePreflight(out, shim);
+}
+
+/** Read a preflight session's JSON result: ok only when the answer names the shim. */
+export function parsePreflight(output: string, shim: string): PreflightResult {
+  let result = "";
+  let cost = 0;
+  try {
+    const doc = JSON.parse(output) as { result?: string; total_cost_usd?: number };
+    result = doc.result ?? "";
+    cost = doc.total_cost_usd ?? 0;
+  } catch {
+    result = output.trim();
+  }
+  const resolved = result.split("\n").map((l) => l.trim()).find((l) => l.startsWith("/")) ?? result.trim();
+  return { ok: resolved === shim, resolved, cost_usd: cost };
 }
 
 /**
@@ -100,7 +175,7 @@ export function runOne(
     }
 
     let prompt = task.prompt;
-    let env: NodeJS.ProcessEnv = { ...process.env, PATH: agentPath() };
+    let env: NodeJS.ProcessEnv = agentEnv(process.env);
     const initialRecordings = new Map<string, RecordingState>();
     if (sandbox) {
       resetSandbox(sandbox);
@@ -116,7 +191,7 @@ export function runOne(
           initialRecordings.set(key, reader.recording(id));
         }
       }
-      env = { ...sandboxEnv(sandbox.def), PATH: env.PATH };
+      env = agentEnv(sandboxEnv(sandbox.def));
     }
 
     const agent = spec.agent ?? "codex";

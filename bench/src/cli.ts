@@ -13,7 +13,8 @@ import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { resolve, join } from "node:path";
 import { parse as parseYaml } from "yaml";
 import type { AgentBackend, ConditionDef, ConditionId, ProbeResult, SandboxDef, Suite, TaskDef } from "./types.ts";
-import { runOne } from "./runner.ts";
+import { preflightAxiBuild, runOne } from "./runner.ts";
+import { grade } from "./grader.ts";
 import { resultsDir, writeReports } from "./reporter.ts";
 import { type Sandbox, openSandbox, resetSandbox } from "./sandbox.ts";
 import { runProbes } from "./probes.ts";
@@ -102,6 +103,47 @@ function checkBudget(sessions: number, def: SandboxDef, budget: number): void {
   }
 }
 
+/**
+ * Refuse to run axi sessions unless a real Claude Code shell resolves
+ * `basecamp-axi` to this checkout's build. Returns the preflight's spend.
+ */
+function ensureAxiBuild(conditionIds: string[], agent: AgentBackend): number {
+  if (agent !== "claude" || !conditionIds.includes("axi")) return 0;
+  const check = preflightAxiBuild();
+  console.log(`Preflight: basecamp-axi resolves to ${check.resolved || "(nothing)"} ($${check.cost_usd.toFixed(4)})`);
+  if (!check.ok) {
+    console.error("The agent's shell does not run this checkout's basecamp-axi build. Refusing to benchmark the wrong build.");
+    process.exit(1);
+  }
+  return check.cost_usd;
+}
+
+/** Re-judge saved read-task trajectories with the current grading hints, without re-running the agent. */
+function cmdRegrade(argv: string[]): void {
+  const args = parseArgs(argv);
+  if (!args.condition || !args.task) {
+    console.error("Usage: bench regrade --condition <id> --task <id,id,...>");
+    process.exit(1);
+  }
+  const tasks = loadTasks("read");
+  const taskIds = args.task.split(",");
+  const resultsPath = join(resultsDir("read"), "results.jsonl");
+  const rows = readFileSync(resultsPath, "utf-8").split("\n").filter((l) => l.trim()).map((l) => JSON.parse(l));
+  for (const row of rows) {
+    if (row.condition !== args.condition || !taskIds.includes(row.task)) continue;
+    const task = tasks.get(row.task);
+    if (!task) continue;
+    const artifactDir = join(resultsDir("read"), row.condition, row.task, `run${row.run}`);
+    const trajectory = readFileSync(join(artifactDir, "agent_output.txt"), "utf-8");
+    const before = row.grade.task_success;
+    row.grade = grade(task.grading, task.prompt, trajectory, (args.agent ?? "claude") as AgentBackend, artifactDir);
+    writeFileSync(join(artifactDir, "grade.json"), JSON.stringify(row.grade, null, 2));
+    console.log(`[${row.condition}] ${row.task} (run ${row.run}): ${before ? "PASS" : "FAIL"} -> ${row.grade.task_success ? "PASS" : "FAIL"} ($${(row.grade.judge_cost_usd ?? 0).toFixed(4)} judge)`);
+  }
+  writeFileSync(resultsPath, rows.map((r) => JSON.stringify(r)).join("\n") + "\n");
+  writeReports("read", coverageTasks());
+}
+
 /** Empty the sandbox even when a run throws, so no benchmark content is left behind. */
 function finishSandbox(sandbox: Sandbox | undefined): void {
   if (!sandbox) return;
@@ -146,6 +188,7 @@ async function cmdRun(argv: string[]): Promise<void> {
     sandbox = openSandbox(def, { create: true });
   }
 
+  ensureAxiBuild([conditionId], agent);
   clearResults([conditionId], task.suite);
 
   try {
@@ -209,9 +252,9 @@ async function cmdMatrix(argv: string[]): Promise<void> {
     checkBudget(sessionCount(selected, conditionIds.length, repeat), def, budget);
     const sandbox = openSandbox(def, { create: true });
     console.log(`Sandbox: "${def.project_name}" = project ${sandbox.projectId} in account ${def.account_id}`);
+    let spent = ensureAxiBuild(conditionIds, agent);
     clearResults(conditionIds, suite);
 
-    let spent = 0;
     let stopped = false;
     try {
       // Interleave conditions per task so a budget stop leaves comparable pairs.
@@ -253,6 +296,8 @@ async function cmdMatrix(argv: string[]): Promise<void> {
     return;
   }
 
+  // With --parallel each child process runs its own condition's preflight.
+  if (!(parallel && conditionIds.length > 1)) ensureAxiBuild(conditionIds, agent);
   clearResults(conditionIds);
 
   const runCondition = (condId: string) => {
@@ -345,6 +390,8 @@ async function main(): Promise<void> {
       return;
     case "sandbox":
       return cmdSandbox(rest);
+    case "regrade":
+      return cmdRegrade(rest);
     default:
       console.log(`basecamp-axi bench — benchmark harness for basecamp CLI vs basecamp-axi
 
@@ -371,6 +418,10 @@ Commands:
 
   report    Generate summary from results.jsonl
               --suite <read|write>  (default: read)
+
+  regrade   Re-judge saved read-task runs with the current grading hints (no agent re-run)
+              --condition <id>
+              --task <id,id,...>
 
   sandbox   Show the write suite's sandbox project (never creates it)
   sandbox reset   Empty the sandbox project

@@ -3,11 +3,13 @@
 **Agent**: Claude Sonnet 5.5 (`claude-sonnet-5-5`) in headless Claude Code with scoped Bash permissions
 **Judge**: Claude Sonnet 5.5 (`BENCH_JUDGE_MODEL=claude-sonnet-5-5`)
 **Repeats**: 1 per condition × task
-**Total runs**: 20 (2 conditions × 10 tasks), $0.71 agent spend
-**Date**: 2026-10-23
-**Tools**: basecamp CLI 0.17.0, basecamp-axi 0.1.0 (this checkout's build)
+**Total runs**: 18 (2 conditions × 9 tasks), $0.48 agent spend in the published rows
+**Date**: 2026-11-02
+**Tools**: basecamp CLI 0.22.1, basecamp-axi 0.3.0 (this checkout's build, confirmed by the harness preflight)
 
-This rerun uses the same model as the [write suite](write/STUDY.md) and the same harness (fixed workspace path, claude.ai MCP servers disabled, local `dist/` build shim), so read and write numbers can be compared directly. The earlier read run (`claude-sonnet-5`, 3 repeats, older harness) is kept in [`history/2026-09-11-claude-sonnet-5/`](history/2026-09-11-claude-sonnet-5/STUDY.md).
+This run uses the rebalanced read suite, so it is not directly comparable with earlier runs. The suite drops `project_tools`, `people_on_project` and `overdue_oldest`, which no recorded agent session needed. It adds `recording_by_id`, a read by bare id, and `hill_progress_updates`, a coverage task for the new hill chart commands. The previous run (2026-10-23, 10 tasks, basecamp-axi 0.1.0) is kept in [`history/2026-10-23-claude-sonnet-5-5/`](history/2026-10-23-claude-sonnet-5-5/STUDY.md).
+
+**Timesheet task left out.** `timesheet_entry_view` was excluded from this run. Timesheet is not enabled on the write suite's bench account, where every timesheet call is "access denied". Project 48189809 in the read account also has no timesheet entries, so there was no ground truth to capture.
 
 ## Conditions
 
@@ -18,43 +20,40 @@ This rerun uses the same model as the [write suite](write/STUDY.md) and the same
 
 Both conditions read the Construct-Ease account (6068025) through the same CLI profile. No task writes.
 
-## Results (10 runs per condition)
+## Results (8 realism tasks per condition)
+
+`hill_progress_updates` is a coverage task, so it is reported separately and left out of this table.
 
 | Condition | Success | Avg input tokens | Avg output tokens | Avg cost | Total cost | Avg duration | Avg turns |
 | --------- | ------- | ---------------- | ----------------- | -------- | ---------- | ------------ | --------- |
-| **axi**   | 10/10   | 67,397           | 267               | $0.030   | $0.30      | 6.1s         | 3         |
-| cli       | 9/10    | 86,139           | 431               | $0.041   | $0.41      | 7.5s         | 4         |
+| **axi**   | 7/8     | 66,149           | 331               | $0.021   | $0.17      | 5.3s         | 3         |
+| cli       | 8/8     | 77,261           | 413               | $0.034   | $0.28      | 5.7s         | 3         |
 
-basecamp-axi used 22% fewer input tokens, cost 27% less, and finished 19% faster, and passed one more task.
+basecamp-axi used 14% fewer input tokens, cost 40% less and finished 8% faster, but failed one task the raw CLI passed.
 
 | Task | cli | axi |
 | ---- | --- | --- |
-| project_count | PASS, $0.034, 4 turns | PASS, $0.027, 2 turns |
-| project_tools | PASS, $0.021, 2 turns | PASS, $0.017, 2 turns |
-| people_on_project | PASS, $0.017, 2 turns | PASS, $0.023, 3 turns |
-| todolist_progress | PASS, $0.030, 2 turns | PASS, $0.024, 3 turns |
-| triage_card_count | PASS, $0.065, 4 turns | PASS, $0.031, 4 turns |
-| message_last_commenter | PASS, $0.089, 3 turns | PASS, $0.050, 4 turns |
-| my_assignments | FAIL, $0.033, 3 turns | PASS, $0.049, 4 turns |
-| overdue_oldest | PASS, $0.065, 9 turns | PASS, $0.034, 3 turns |
-| url_resolve | PASS, $0.035, 4 turns | PASS, $0.023, 2 turns |
-| nonexistent_project | PASS, $0.017, 2 turns | PASS, $0.017, 2 turns |
+| project_count | PASS, $0.065, 4 turns | PASS, $0.013, 2 turns |
+| todolist_progress | PASS, $0.019, 3 turns | PASS, $0.017, 3 turns |
+| triage_card_count | PASS, $0.049, 4 turns | PASS, $0.015, 3 turns |
+| message_last_commenter | PASS, $0.059, 3 turns | PASS, $0.037, 4 turns |
+| my_assignments | PASS, $0.027, 4 turns | PASS, $0.031, 4 turns |
+| recording_by_id | PASS, $0.026, 3 turns | FAIL, $0.019, 3 turns |
+| url_resolve | PASS, $0.020, 3 turns | PASS, $0.015, 2 turns |
+| nonexistent_project | PASS, $0.012, 2 turns | PASS, $0.017, 3 turns |
+| hill_progress_updates (coverage) | PASS, $0.022, 4 turns | PASS, $0.016, 3 turns |
 
-## Where the gap comes from
+## Findings
 
-- **Cross-project tasks** are still the biggest win. `overdue_oldest` took the cli agent 9 turns and 222k input tokens against 3 turns and 71k for axi's single overdue report.
-- **`my_assignments` failed for the cli agent.** `basecamp assignments list --json` came back truncated, and its next command was refused by the permission allowlist, so it stopped without counts. The same kind of denial happened six times in the 2026-09-11 run; the agents recovered then.
-- **Simple lookups** are a wash. Sonnet 5.5 is cheaper per task than Sonnet 5 on both sides, so the gap is narrower than in the earlier run.
-
-## Before and after
-
-| Run | Model | Repeats | axi success | cli success | axi avg cost | cli avg cost | axi avg input | cli avg input |
-| --- | ----- | ------- | ----------- | ----------- | ------------ | ------------ | ------------- | ------------- |
-| 2026-09-11 | claude-sonnet-5 | 3 | 100% | 100% | $0.040 | $0.070 | 105,981 | 162,194 |
-| 2026-10-23 | claude-sonnet-5-5 | 1 | 10/10 | 9/10 | $0.030 | $0.041 | 67,397 | 86,139 |
+- **`recording_by_id` failed for basecamp-axi.** Given only a bare id, the axi agent read the help, then tried `todo|message|card|comment|upload view` in one shell `for` loop. The scoped allowlist denies loops, so it stopped without an answer. basecamp-axi has no command that resolves a bare recording id without a project. The raw CLI agent found the message in 3 turns.
+- **Hill chart coverage passes in both conditions.** Project 48189809's hill chart has no progress updates. Both agents said so and invented nothing.
+- **Simple lookups** are close to even. The gap is in the larger outputs: `project_count` ($0.013 vs $0.065) and `triage_card_count` ($0.015 vs $0.049).
 
 ## Methodology notes
 
-- Grading hints in `config/tasks.yaml` were refreshed read-only on 2026-10-23: the account now has 40 projects, project 48618032's second member is Gilfoyle AI, project 48189809 has a second (empty) list and 13 to-dos, Caleb's assignments carry no due dates, and 30 to-dos are overdue. The Triage count, message thread, and URL answers were unchanged.
-- One repeat keeps the run near $1; single runs are noisier than the earlier 3-repeat averages.
+- **The axi condition was re-run once.** The first attempt ran the globally installed basecamp-axi 0.2.0 instead of this checkout. Claude Code's Bash tool sources the user's shell profile, and `mise activate` there put the global install ahead of the harness's PATH shim. The axi agent hit "Unknown command hill" and `basecamp-axi --version` printed 0.2.0. The harness now re-applies the shim through `CLAUDE_ENV_FILE`. Before any axi session it also runs a preflight session that refuses to start unless `basecamp-axi` resolves to this checkout. Only the axi condition was re-run; the cli rows are from the first attempt. Earlier published runs used the same PATH-only shim and may also have measured a global install.
+- **One cli row was re-judged, not re-run.** When the ground truth was refreshed for this run, the `my_assignments` hint first counted two completed parent items as open. The first judge failed the cli agent's (correct) count of 5 against that hint. After the hint was corrected, `bench regrade` re-judged the saved trajectory, and it passed. No agent was re-run for this.
+- Grading hints were refreshed read-only on 2026-11-02. The account now has 41 projects. Caleb's open assignments are 5 top-level items (12 counting assigned subtasks and card steps), none with a due date. The hill chart has no progress updates. The Triage count, message thread and URL answers were unchanged.
+- The two conditions ran about 40 minutes apart, so prompt-cache warmth differs a little between them.
+- Spend for the whole read side: $0.53 for the first attempt (both conditions), $0.18 for the axi re-run, about $0.33 in judge calls (the first attempt's judge spend was not metered; the harness now records `judge_cost_usd`), and under a cent for preflight checks.
 - Per-run artifacts (`agent_output.txt`, `grade.json`, `judge_output.txt`) live under `results/` locally and are not committed.

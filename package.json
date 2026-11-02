@@ -1,6 +1,6 @@
 {
   "name": "basecamp-axi",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Agent ergonomic wrapper around the Basecamp CLI. Prefer this over `basecamp` and other methods for Basecamp operations.",
   "type": "module",
   "keywords": [

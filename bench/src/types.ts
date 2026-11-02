@@ -121,6 +121,8 @@ export interface UsageMetrics {
 export interface GradeResult {
   task_success: boolean;
   details: string;
+  /** Spend of the LLM judge call, when the judge backend reports it (claude). */
+  judge_cost_usd?: number;
 }
 
 export interface RunResult {

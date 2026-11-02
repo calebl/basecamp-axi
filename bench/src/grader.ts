@@ -160,7 +160,7 @@ export function grade(
   let judgeOutput: string;
   try {
     const { cmd, args } = judgeBackend === "claude"
-      ? { cmd: "claude", args: ["--setting-sources", "", "-p", prompt, "--model", CLAUDE_JUDGE_MODEL, "--output-format", "text", "--max-turns", "1", "--tools", "", "--no-session-persistence"] }
+      ? { cmd: "claude", args: ["--setting-sources", "", "-p", prompt, "--model", CLAUDE_JUDGE_MODEL, "--output-format", "json", "--max-turns", "1", "--tools", "", "--no-session-persistence"] }
       : { cmd: "codex", args: ["exec", "--json", "--model", CODEX_JUDGE_MODEL, "--ephemeral", prompt] };
     judgeOutput = execFileSync(
       cmd,
@@ -179,6 +179,18 @@ export function grade(
         task_success: false,
         details: `Judge process failed: ${execErr.stderr ?? "unknown error"}`,
       };
+    }
+  }
+
+  // The claude judge answers with a JSON envelope: its text in `result`, its spend in `total_cost_usd`.
+  let judgeCost: number | undefined;
+  if (judgeBackend === "claude") {
+    try {
+      const doc = JSON.parse(judgeOutput) as { result?: string; total_cost_usd?: number };
+      judgeCost = doc.total_cost_usd;
+      judgeOutput = doc.result ?? judgeOutput;
+    } catch {
+      // Not an envelope; parse the verdict from the raw text below.
     }
   }
 
@@ -203,6 +215,7 @@ export function grade(
   return {
     task_success: verdict.pass,
     details: verdict.reason,
+    ...(judgeCost !== undefined ? { judge_cost_usd: judgeCost } : {}),
   };
 }
 

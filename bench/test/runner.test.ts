@@ -1,7 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { fillPrompt, mergeUsage } from "../src/runner.ts";
+import { readFileSync } from "node:fs";
+
+import { agentEnv, fillPrompt, mergeUsage, parsePreflight } from "../src/runner.ts";
 import { csvReport, markdownReport, probesReport } from "../src/reporter.ts";
 import type { RunResult, UsageMetrics } from "../src/types.ts";
 
@@ -56,4 +58,22 @@ test("reports separate coverage from realism", () => {
   assert.equal(csv[0].split(",")[2], "coverage");
   assert.equal(csv[1].split(",")[2], "true");
   assert.equal(csv[2].split(",")[2], "false");
+});
+
+test("parsePreflight passes only when the shell resolves to the shim", () => {
+  const shim = "/repo/bench/results/.bin/basecamp-axi";
+  const ok = parsePreflight(JSON.stringify({ result: "```\n" + shim + "\n```", total_cost_usd: 0.002 }), shim);
+  assert.equal(ok.ok, true);
+  assert.equal(ok.cost_usd, 0.002);
+  const global = parsePreflight(JSON.stringify({ result: "/home/u/.local/share/mise/installs/npm-basecamp-axi/latest/bin/basecamp-axi" }), shim);
+  assert.equal(global.ok, false);
+  assert.match(global.resolved, /mise/);
+  assert.equal(parsePreflight("", shim).ok, false);
+});
+
+test("agentEnv re-applies the shim after the shell profile through CLAUDE_ENV_FILE", () => {
+  const env = agentEnv({ PATH: "/usr/bin" });
+  if (!env.CLAUDE_ENV_FILE) return; // repository not built: no shim to pin
+  assert.ok(env.PATH?.split(":")[0].endsWith("results/.bin"));
+  assert.match(readFileSync(env.CLAUDE_ENV_FILE, "utf-8"), /^export PATH='.+results\/\.bin':"\$PATH"\n$/);
 });
