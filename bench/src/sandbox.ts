@@ -27,6 +27,9 @@ export interface CommentItem { id: string; text: string }
 export interface CardItem { id: string; title: string; column: string }
 export interface MessageItem { id: string; title: string; body: string }
 export interface UploadItem { id: string; filename: string }
+export interface TimesheetItem { id: string; hours: string; date: string; description: string; item_id: string; item_title: string }
+export interface HillDot { id: string; label: string; position: number }
+export interface HillUpdateItem { id: string; note: string; dots: HillDot[] }
 
 export interface BasecampReader {
   meEmail(): string;
@@ -38,6 +41,9 @@ export interface BasecampReader {
   messages(): MessageItem[];
   chatLines(): CommentItem[];
   uploads(): UploadItem[];
+  timesheetEntries(): TimesheetItem[];
+  hillDots(): HillDot[];
+  hillUpdates(): HillUpdateItem[];
 }
 
 type Json = Record<string, any>;
@@ -73,6 +79,7 @@ function bc(def: SandboxDef, args: string[]): any {
 }
 
 const list = (data: unknown): Json[] => (Array.isArray(data) ? (data as Json[]) : []);
+const toDot = (d: Json): HillDot => ({ id: String(d.id), label: String(d.label ?? ""), position: Number(d.position ?? 0) });
 
 /** Find the sandbox project by exact name (creating it when absent) and make sure its tools are ready. */
 export function openSandbox(def: SandboxDef, opts: { create: boolean }): Sandbox {
@@ -128,10 +135,39 @@ function guard(sb: Sandbox, rec: Json): void {
   }
 }
 
-/** Trash every to-do list, to-do, message, card, document and upload, and delete every chat line. */
+/** Read that fails with `pattern` (a feature the account lacks, an untouched hill chart) reads as empty. */
+function orEmpty(read: () => unknown, pattern: RegExp): Json[] {
+  try {
+    return list(read());
+  } catch (err) {
+    if (pattern.test((err as Error).message)) return [];
+    throw err;
+  }
+}
+
+/** Timesheet listings fail with "access denied" when the account has Timesheet turned off. */
+const NO_TIMESHEET = /access denied/i;
+/** A hill chart nobody has tracked a list on yet reads as not found. */
+const NO_HILL = /not found/i;
+
+/**
+ * Delete every timesheet entry and trash every hill chart progress update, then trash every to-do
+ * list, to-do, message, card, document and upload, and delete every chat line. Entries go first
+ * because they hang off to-dos, and trashing the to-do lists also takes them off the hill chart.
+ */
 export function resetSandbox(sb: Sandbox): number {
   const { def, projectId: p } = sb;
   let removed = 0;
+  for (const entry of orEmpty(() => bc(def, ["timesheet", "project", "--in", p]), NO_TIMESHEET)) {
+    guard(sb, entry);
+    bc(def, ["timesheet", "entry", "delete", String(entry.id), "--force"]);
+    removed++;
+  }
+  for (const update of list(bc(def, ["hillcharts", "updates", "--in", p, "--all"]))) {
+    guard(sb, update);
+    bc(def, ["recordings", "trash", String(update.id), "--in", p]);
+    removed++;
+  }
   for (const tl of list(bc(def, ["todolists", "list", "--in", p, "--all"]))) {
     guard(sb, tl);
     bc(def, ["todolists", "trash", String(tl.id), "--in", p]);
@@ -176,6 +212,22 @@ export function seedSandbox(sb: Sandbox, seed: SeedSpec | undefined): Map<string
     if (msg.body) args.push(msg.body);
     const created = bc(def, [...args, "--in", p, "--no-subscribe"]) as Json;
     ids.set(msg.title, String(created.id));
+  }
+  for (const entry of seed.timesheet ?? []) {
+    const todoId = ids.get(entry.todo);
+    if (!todoId) throw new Error(`Timesheet seed names to-do "${entry.todo}", which the seed does not create.`);
+    const args = ["timesheet", "entry", "create", todoId, "--hours", entry.hours];
+    if (entry.description) args.push("--description", entry.description);
+    const created = bc(def, [...args, "--in", p]) as Json;
+    ids.set(`timesheet:${entry.todo}`, String(created.id));
+  }
+  if (seed.hill?.length) {
+    const listIds = seed.hill.map((name) => {
+      const id = ids.get(name);
+      if (!id) throw new Error(`Hill seed names to-do list "${name}", which the seed does not create.`);
+      return id;
+    });
+    bc(def, ["hillcharts", "track", listIds.join(","), "--in", p]);
   }
   return ids;
 }
@@ -231,6 +283,22 @@ export function sandboxReader(sb: Sandbox): BasecampReader {
       list(bc(def, ["uploads", "list", "--in", p, "--all"])).map((u) => ({
         id: String(u.id),
         filename: String(u.filename ?? u.title ?? ""),
+      })),
+    timesheetEntries: () =>
+      list(bc(def, ["timesheet", "project", "--in", p])).filter((e) => inProject(sb, e)).map((e) => ({
+        id: String(e.id),
+        hours: String(e.hours ?? ""),
+        date: String(e.date ?? ""),
+        description: String(e.description ?? ""),
+        item_id: String(e.parent?.id ?? ""),
+        item_title: String(e.parent?.title ?? ""),
+      })),
+    hillDots: () => orEmpty(() => (bc(def, ["hillcharts", "show", "--in", p]) as Json)?.dots, NO_HILL).map(toDot),
+    hillUpdates: () =>
+      list(bc(def, ["hillcharts", "updates", "--in", p, "--all"])).filter((u) => inProject(sb, u)).map((u) => ({
+        id: String(u.id),
+        note: String(u.description ?? ""),
+        dots: list(u.dots).map(toDot),
       })),
   };
 }

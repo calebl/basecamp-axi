@@ -26,9 +26,10 @@ export function mapBasecampError(failure: BasecampFailure, exitCode: number): Ax
     ]);
   }
 
-  const unknownCommand = /^unknown command "([^"]+)"/.exec(message);
+  const unknownCommand = /^unknown command "([^"]+)"(?: for "basecamp ?([^"]*)")?/.exec(message);
   if (unknownCommand) {
-    return new AxiError(`The installed basecamp CLI has no \`${unknownCommand[1]}\` command`, "DEPENDENCY_OUTDATED", [
+    const name = [unknownCommand[2], unknownCommand[1]].filter(Boolean).join(" ");
+    return new AxiError(`The installed basecamp CLI has no \`${name}\` command`, "DEPENDENCY_OUTDATED", [
       "Ask the user to run `basecamp upgrade`, then retry",
     ]);
   }

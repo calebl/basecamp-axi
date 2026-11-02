@@ -85,6 +85,39 @@ export async function bc<T = unknown>(args: string[], options: CallOptions = {})
   };
 }
 
+let cliVersion: Promise<number[] | undefined> | undefined;
+
+/**
+ * Fail with DEPENDENCY_OUTDATED when the installed basecamp CLI is older than `min`.
+ * Needed where an older CLI would not reject the call: before 0.22, `timesheet entry show <id>`
+ * silently ran the account-wide report instead. An unreadable version is allowed through.
+ */
+export async function requireCliVersion(min: string, feature: string): Promise<void> {
+  cliVersion ??= run(["--version"]).then((r) => {
+    if (r.notInstalled) throw basecampNotInstalledError();
+    return parseVersion(r.stdout);
+  });
+  const installed = await cliVersion;
+  const wanted = parseVersion(min);
+  if (!installed || !wanted || compareVersions(installed, wanted) >= 0) return;
+  throw new AxiError(`\`${feature}\` needs basecamp CLI ${min} or newer (installed: ${installed.join(".")})`, "DEPENDENCY_OUTDATED", [
+    "Ask the user to run `basecamp upgrade`, then retry",
+  ]);
+}
+
+export function parseVersion(text: string): number[] | undefined {
+  const m = /(\d+)\.(\d+)\.(\d+)/.exec(text);
+  return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : undefined;
+}
+
+export function compareVersions(a: number[], b: number[]): number {
+  for (let i = 0; i < 3; i++) {
+    const d = (a[i] ?? 0) - (b[i] ?? 0);
+    if (d !== 0) return d;
+  }
+  return 0;
+}
+
 function parseEnvelope(stdout: string): Envelope | undefined {
   const trimmed = stdout.trim();
   if (!trimmed.startsWith("{")) return undefined;

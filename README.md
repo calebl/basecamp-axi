@@ -71,6 +71,13 @@ basecamp-axi people list --in 48189809 --fields email,sgid
 basecamp-axi search "pull sheet"
 basecamp-axi report assigned                          # cross-project
 basecamp-axi report overdue
+basecamp-axi timesheet list --in 48189809                         # project entries with total hours
+basecamp-axi timesheet create 10170015169 --hours 1:30 --description "Review"
+basecamp-axi timesheet update 1069480283 --hours 2.5              # no-op when nothing changes
+basecamp-axi timesheet delete 1069480283 --confirm                # permanent; dry run without --confirm
+basecamp-axi hill view --in 48189809                              # tracked todolists at 0-100
+basecamp-axi hill update --dot "Design=60" --note "Over the hill" --in 48189809
+basecamp-axi hill updates --in 48189809                           # past progress updates
 basecamp-axi url parse "https://3.basecamp.com/.../buckets/48189809/todos/10170015169"
 basecamp-axi recording archive 10295117789 --in 48618032            # dry run: shows what would change
 basecamp-axi recording archive 10295117789 --in 48618032 --confirm  # applies it
@@ -84,7 +91,7 @@ Most commands need a project. Resolution order:
 2. `BASECAMP_PROJECT` environment variable
 3. `project_id` in the nearest `.basecamp/config.json` walking up from the working directory
 
-Cross-project commands need no scope: `project list`, `report`, `search`, `people` (without `--in`), `url parse`.
+Cross-project commands need no scope: `project list`, `report`, `timesheet report`, `search`, `people` (without `--in`), `url parse`.
 
 ### Commands
 
@@ -102,6 +109,8 @@ Cross-project commands need no scope: `project list`, `report`, `search`, `peopl
 | `people`    | list, view, me                                                         |
 | `search`    | full-text search across the account                                    |
 | `report`    | assigned, overdue (cross-project)                                      |
+| `timesheet` | list, report, view, create, update, delete (requires `--confirm`)      |
+| `hill`      | view, track, untrack, update (move dots, post a progress update), updates |
 | `recording` | list by type and status; trash, archive, restore (require `--confirm`) |
 | `url`       | parse a Basecamp link into project, recording, and comment ids         |
 | `setup`     | install agent session hooks                                            |
@@ -112,15 +121,15 @@ Cross-project commands need no scope: `project list`, `report`, `search`, `peopl
 - **TOON output** on stdout, errors included; stderr carries nothing an agent needs.
 - **Truncation**: descriptions and bodies are clipped (800 to 1500 chars) with the total size shown; `--full` on the same view command returns everything.
 - **Totals**: lists print `count: N of T total` when the underlying CLI reports a total, plus a hint to fetch the rest.
-- **Idempotent**: `todo done` on a completed todo reports `already done (no-op)` and exits 0; the same holds for `recording trash|archive|restore`.
-- **Confirmation gate**: trash, archive, and restore are the only commands that change visibility for other people. Without `--confirm` they are a dry run.
+- **Idempotent**: `todo done` on a completed todo reports `already done (no-op)` and exits 0; the same holds for `recording trash|archive|restore`, `hill track|untrack`, `timesheet update` with values that already match, and `hill update` that moves dots to where they already are (without a note).
+- **Confirmation gate**: trash, archive, restore, and `timesheet delete` (permanent) need `--confirm`. Without it they are a dry run.
 - **Strict flags**: unknown flags and extra positionals exit 2 with the list of valid flags. `--json`, `--md`, and `--jq` are rejected with a hint since output is always TOON.
 - **Column names**: `card list --column`, `card create --column`, and `card move --to` accept a column name and resolve it to an id automatically when the project has one card table.
 - **Exit codes**: 0 success (including no-ops), 1 error, 2 usage error.
 
 ### Compatibility with the basecamp CLI
 
-Tested against basecamp CLI 0.11.0 (also exercised on 0.4.0). basecamp-axi calls only long-form subcommands (`todos create`, `comments create`, and so on), so it works whether or not a version ships the short aliases. Flags or commands the installed version lacks surface as `DEPENDENCY_OUTDATED` with a hint to upgrade; `subtask` needs a CLI with the `subtasks` command (tested on 0.17.0). `card update` re-sends the current due date because older CLIs otherwise clear it.
+Tested against basecamp CLI 0.11.0 (also exercised on 0.4.0). basecamp-axi calls only long-form subcommands (`todos create`, `comments create`, and so on), so it works whether or not a version ships the short aliases. Flags or commands the installed version lacks surface as `DEPENDENCY_OUTDATED` with a hint to upgrade; `subtask` needs a CLI with the `subtasks` command (tested on 0.17.0). `timesheet view|create|update|delete`, `hill update`, and `hill updates` need CLI 0.22.0 or newer (tested on 0.22.1) and check the installed version first, because older CLIs run the timesheet report instead of rejecting `timesheet entry`. `card update` re-sends the current due date because older CLIs otherwise clear it.
 
 ## Benchmark
 
@@ -138,7 +147,7 @@ Tasks and their ground-truth grading hints live in `bench/config/tasks.yaml`; th
 The write suite (`suite: write` tasks) changes Basecamp, so it runs only inside one sandbox project, configured in `bench/config/sandbox.yaml`. The config sets the CLI profile, the account, the exact project name, the agent model, and a spend cap. The harness creates the project when it is missing. It empties the project and seeds it before every task, and empties it again at the end. Each task is graded by a named check in `bench/src/write-grader.ts` that reads the project back. Before starting, a write matrix prints its cost estimate. It refuses to start over budget and stops once actual spend reaches the cap. After the agent tasks, it runs model-free safety probes (trash without confirmation, completing a to-do twice).
 
 ```sh
-npm run bench -- matrix --suite write             # 11 tasks × 2 conditions + safety probes, ≈ $1
+npm run bench -- matrix --suite write             # 15 tasks × 2 conditions + safety probes, estimated under $2
 npm run bench -- run --condition axi --task card_move
 npm run bench -- report --suite write             # results/write/report.md
 npm run bench -- sandbox reset                    # empty the sandbox project by hand

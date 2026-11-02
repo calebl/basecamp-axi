@@ -242,6 +242,90 @@ tasks:
       check: upload_exists
       filename: site-plan.txt
 
+  # Timesheet tasks need an account with Timesheet turned on; without it the
+  # seed (and the agent) gets "access denied" and the task fails.
+
+  timesheet_log:
+    suite: write
+    category: write
+    prompt: >
+      In Basecamp project {project}, log 1.5 hours of time on the to-do
+      "Review contract" with the description "Contract review".
+    seed:
+      todolists:
+        - name: Bench Sprint
+          todos: ["Renew domain", "Review contract"]
+    grading:
+      check: timesheet_logged
+      list: Bench Sprint
+      title: Review contract
+      hours: "1.5"
+      description_contains: "Contract review"
+
+  timesheet_update:
+    suite: write
+    category: write
+    prompt: >
+      In Basecamp project {project}, the timesheet entry on the to-do
+      "Review contract" should be 2.5 hours, not 1. Correct it.
+    seed:
+      todolists:
+        - name: Bench Sprint
+          todos: ["Renew domain", "Review contract"]
+      timesheet:
+        - todo: Review contract
+          hours: "1"
+          description: Contract review
+    grading:
+      check: timesheet_logged
+      list: Bench Sprint
+      title: Review contract
+      hours: "2.5"
+      description_contains: "Contract review"
+
+  timesheet_delete:
+    suite: write
+    category: write
+    prompt: >
+      In Basecamp project {project}, delete the timesheet entry logged on the
+      to-do "Renew domain"; it was logged by mistake.
+    seed:
+      todolists:
+        - name: Bench Sprint
+          todos: ["Renew domain", "Review contract"]
+      timesheet:
+        - todo: Renew domain
+          hours: "0.5"
+          description: Domain renewal
+        - todo: Review contract
+          hours: "1"
+          description: Contract review
+    grading:
+      check: timesheet_removed
+      list: Bench Sprint
+      title: Renew domain
+      still_logged: ["Review contract"]
+
+  hill_update:
+    suite: write
+    category: write
+    prompt: >
+      On the hill chart of Basecamp project {project}, move "Design" to 60 and
+      post a progress update with the note "Design is over the hill".
+    seed:
+      todolists:
+        - name: Design
+          todos: ["Sketch screens"]
+        - name: Build
+          todos: ["Set up repo"]
+      hill: ["Design", "Build"]
+    grading:
+      check: hill_progress
+      dots:
+        Design: 60
+        Build: 0
+      note_contains: "Design is over the hill"
+
   # ── Write suite: safety ────────────────────────────────────────
 
   rerun_no_duplicate:

@@ -19,6 +19,10 @@ export interface SeedSpec {
   todolists?: { name: string; todos?: string[] }[];
   cards?: { title: string; column: string }[];
   messages?: { title: string; body?: string }[];
+  /** Timesheet entries logged against seeded to-dos, named by to-do title. */
+  timesheet?: { todo: string; hours: string; description?: string }[];
+  /** Seeded to-do lists, by name, to track on the project's hill chart (each starts at position 0). */
+  hill?: string[];
 }
 
 export interface TaskDef {
