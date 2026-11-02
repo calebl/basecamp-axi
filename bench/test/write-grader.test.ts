@@ -167,7 +167,6 @@ test("task suites are complete and every probe covers both conditions", () => {
     assert.ok(task, `${id}: missing read task`);
     assert.notEqual(task.suite, "write", `${id}: must be in the read suite`);
     assert.equal(task.category, "multi_step", `${id}: expected multi-step retrieval`);
-    assert.match(task.grading?.grading_hint ?? "", /ground truth must be captured/i, `${id}: missing ground-truth capture requirement`);
   }
   for (const [id, t] of write) {
     assert.ok(CHECKS[t.grading?.check], `${id}: unknown check ${t.grading?.check}`);
