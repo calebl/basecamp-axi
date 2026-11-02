@@ -197,6 +197,7 @@ test("hill view on an untouched hill is a definitive empty state", () => {
   for (const response of [
     { ok: false, error: "resource not found", code: "not_found" },
     { ok: false, error: "No todolists to track on the hill chart", code: "usage" },
+    { ok: false, error: "No todolists to track on the hill chart", code: "forbidden" },
   ]) {
     const { stdout, status } = run(["hill", "view", "--in", "99"], { "hillcharts show": response });
     assert.equal(status, 0);
@@ -215,7 +216,7 @@ test("hill view preserves genuine access denial", () => {
 
 test("hill track initializes a chart after the empty-todoset response", () => {
   const { status, calls } = run(["hill", "track", "333", "--in", "99"], {
-    "hillcharts show": { ok: false, error: "No todolists to track on the hill chart", code: "usage" },
+    "hillcharts show": { ok: false, error: "No todolists to track on the hill chart", code: "forbidden" },
     "hillcharts track": { ok: true, data: { dots: [{ id: 333, label: "Ship", position: 0 }] } },
   });
   assert.equal(status, 0);

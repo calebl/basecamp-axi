@@ -94,8 +94,8 @@ async function currentDots(ctx: CliContext | undefined, project: NonNullable<Cli
     return asList<Row>(result.data?.dots);
   } catch (error) {
     if (error instanceof AxiError) {
+      if (/no todolists to track on the hill chart/i.test(error.message)) return [];
       if (error.code === "NOT_FOUND" && !/project/i.test(error.message)) return [];
-      if (error.code === "VALIDATION_ERROR" && /no todolists to track on the hill chart/i.test(error.message)) return [];
     }
     throw error;
   }
