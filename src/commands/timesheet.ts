@@ -130,13 +130,23 @@ function renderEntries(entries: Row[], limit: number, empty: string, hints: stri
   ]);
 }
 
+function recordingId(ref: string): string {
+  if (!/^https?:\/\//i.test(ref)) return ref;
+  try {
+    const ids = new URL(ref).pathname.split("/").filter((part) => /^\d+$/.test(part));
+    return ids.at(-1) ?? ref;
+  } catch {
+    return ref;
+  }
+}
+
 async function list(args: string[], ctx: CliContext | undefined): Promise<string> {
   const parsed = parseArgs(args, LIST_FLAGS, { command: "timesheet list" });
   const limit = int(parsed, "--limit", 50);
   const item = str(parsed, "--item");
   const pf = projectFlag(ctx);
   if (item) {
-    const result = await ts(["item", item], { project: ctx?.project, account: ctx?.account });
+    const result = await ts(["item", recordingId(item)], { project: ctx?.project, account: ctx?.account });
     return renderEntries(asList<Row>(result.data), limit, `timesheet entries on item ${item}`, [
       `Run \`basecamp-axi timesheet create ${item} --hours <h>\` to log time on it`,
     ]);

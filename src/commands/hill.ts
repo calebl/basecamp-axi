@@ -87,13 +87,16 @@ function todosetArgs(parsed: ParsedArgs): string[] {
   return todoset ? ["--todoset", todoset] : [];
 }
 
-/** Current dots; an untouched hill (nothing ever tracked) reads as not found, so treat that as empty. */
-async function currentDots(ctx: CliContext | undefined, project: NonNullable<CliContext["project"]>, parsed: ParsedArgs): Promise<Row[] | undefined> {
+/** Current dots; an untouched hill reads as not found or as the CLI's empty-todoset usage error. */
+async function currentDots(ctx: CliContext | undefined, project: NonNullable<CliContext["project"]>, parsed: ParsedArgs): Promise<Row[]> {
   try {
     const result = await bc<Row>(["hillcharts", "show", ...todosetArgs(parsed)], { project, account: ctx?.account });
     return asList<Row>(result.data?.dots);
   } catch (error) {
-    if (error instanceof AxiError && error.code === "NOT_FOUND" && !/project/i.test(error.message)) return undefined;
+    if (error instanceof AxiError) {
+      if (error.code === "NOT_FOUND" && !/project/i.test(error.message)) return [];
+      if (error.code === "VALIDATION_ERROR" && /no todolists to track on the hill chart/i.test(error.message)) return [];
+    }
     throw error;
   }
 }
@@ -107,7 +110,7 @@ async function view(args: string[], ctx: CliContext | undefined): Promise<string
   const project = requireProject(ctx, "hill view");
   const pf = projectFlag(ctx);
   const dots = await currentDots(ctx, project, parsed);
-  if (!dots || dots.length === 0) {
+  if (dots.length === 0) {
     return renderOutput([
       `dots: 0 todolists tracked on the hill chart in project ${project.value}`,
       renderHelp([
@@ -131,7 +134,7 @@ async function track(args: string[], ctx: CliContext | undefined, action: "track
   const project = requireProject(ctx, `hill ${action}`);
   if (parsed.positionals.length === 0) requirePositional(parsed, 0, "todolist id|name", `basecamp-axi hill ${action} <todolist id|name>... --in <project>`);
   const refs = parsed.positionals.flatMap((p) => p.split(",")).map((r) => r.trim()).filter(Boolean);
-  const before = (await currentDots(ctx, project, parsed)) ?? [];
+  const before = await currentDots(ctx, project, parsed);
   const pending = refs.filter((r) => (action === "track" ? !matchDot(before, r) : Boolean(matchDot(before, r))));
   const pf = projectFlag(ctx) || ` --in ${project.value}`;
 
@@ -186,7 +189,7 @@ async function update(args: string[], ctx: CliContext | undefined): Promise<stri
 
   // A bare move to where the dots already sit would post an empty update; report a no-op instead.
   if (!note && !notify) {
-    const before = (await currentDots(ctx, project, parsed)) ?? [];
+    const before = await currentDots(ctx, project, parsed);
     const unchanged = dots.every((d) => {
       const dot = matchDot(before, d.ref);
       return dot !== undefined && Number(dot.position ?? 0) === d.position;

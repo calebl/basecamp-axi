@@ -147,8 +147,8 @@ function orEmpty(read: () => unknown, pattern: RegExp): Json[] {
 
 /** Timesheet listings fail with "access denied" when the account has Timesheet turned off. */
 const NO_TIMESHEET = /access denied/i;
-/** A hill chart nobody has tracked a list on yet reads as not found. */
-const NO_HILL = /not found/i;
+/** An untouched hill may read as missing, disabled, or forbidden by the underlying API. */
+const NO_HILL = /not found|no todolists to track on the hill chart|failed: forbidden$/i;
 
 /**
  * Delete every timesheet entry and trash every hill chart progress update, then trash every to-do
@@ -163,7 +163,7 @@ export function resetSandbox(sb: Sandbox): number {
     bc(def, ["timesheet", "entry", "delete", String(entry.id), "--force"]);
     removed++;
   }
-  for (const update of list(bc(def, ["hillcharts", "updates", "--in", p, "--all"]))) {
+  for (const update of orEmpty(() => bc(def, ["hillcharts", "updates", "--in", p, "--all"]), NO_HILL)) {
     guard(sb, update);
     bc(def, ["recordings", "trash", String(update.id), "--in", p]);
     removed++;
@@ -295,7 +295,7 @@ export function sandboxReader(sb: Sandbox): BasecampReader {
       })),
     hillDots: () => orEmpty(() => (bc(def, ["hillcharts", "show", "--in", p]) as Json)?.dots, NO_HILL).map(toDot),
     hillUpdates: () =>
-      list(bc(def, ["hillcharts", "updates", "--in", p, "--all"])).filter((u) => inProject(sb, u)).map((u) => ({
+      orEmpty(() => bc(def, ["hillcharts", "updates", "--in", p, "--all"]), NO_HILL).filter((u) => inProject(sb, u)).map((u) => ({
         id: String(u.id),
         note: String(u.description ?? ""),
         dots: list(u.dots).map(toDot),

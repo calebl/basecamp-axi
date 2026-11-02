@@ -47,6 +47,13 @@ test("timesheet list --item reads one item and prints a definitive empty state",
   assert.match(stdout, /entries: 0 timesheet entries on item 777/);
 });
 
+test("timesheet list --item extracts the recording id from a Basecamp URL", () => {
+  const url = "https://3.basecamp.com/123/buckets/99/todos/777";
+  const { status, calls } = run(["timesheet", "list", "--item", url], { "timesheet item": { ok: true, data: [] } });
+  assert.equal(status, 0);
+  assert.deepEqual(calls[0]!.slice(0, 3), ["timesheet", "item", "777"]);
+});
+
 test("timesheet report passes the range as --start/--end and does not forward the project", () => {
   const { status, calls } = run(["timesheet", "report", "--from", "2026-10-01", "--to", "2026-10-31", "--person", "5", "--in", "99"], {
     "timesheet report": { ok: true, data: [ENTRY] },
@@ -187,12 +194,32 @@ test("hill view lists dots with a phase", () => {
 });
 
 test("hill view on an untouched hill is a definitive empty state", () => {
+  for (const response of [
+    { ok: false, error: "resource not found", code: "not_found" },
+    { ok: false, error: "No todolists to track on the hill chart", code: "usage" },
+  ]) {
+    const { stdout, status } = run(["hill", "view", "--in", "99"], { "hillcharts show": response });
+    assert.equal(status, 0);
+    assert.match(stdout, /dots: 0 todolists tracked/);
+    assert.match(stdout, /hill track/);
+  }
+});
+
+test("hill view preserves genuine access denial", () => {
   const { stdout, status } = run(["hill", "view", "--in", "99"], {
-    "hillcharts show": { ok: false, error: "resource not found", code: "not_found" },
+    "hillcharts show": { ok: false, error: "Forbidden", code: "forbidden" },
+  });
+  assert.equal(status, 1);
+  assert.match(stdout, /code: FORBIDDEN/);
+});
+
+test("hill track initializes a chart after the empty-todoset response", () => {
+  const { status, calls } = run(["hill", "track", "333", "--in", "99"], {
+    "hillcharts show": { ok: false, error: "No todolists to track on the hill chart", code: "usage" },
+    "hillcharts track": { ok: true, data: { dots: [{ id: 333, label: "Ship", position: 0 }] } },
   });
   assert.equal(status, 0);
-  assert.match(stdout, /dots: 0 todolists tracked/);
-  assert.match(stdout, /hill track/);
+  assert.deepEqual(calls.find((c) => c[1] === "track")!.slice(0, 3), ["hillcharts", "track", "333"]);
 });
 
 test("hill track skips lists already on the hill", () => {
