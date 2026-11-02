@@ -45,6 +45,7 @@ test("timesheet help limits --item to numeric ids", () => {
   assert.equal(status, 0);
   assert.equal(calls.length, 0);
   assert.match(stdout, /--item <id>\s+Only entries on one item/);
+  assert.match(stdout, /delete <entry id\|url> --confirm/);
 });
 
 test("timesheet list --item reads one item and prints a definitive empty state", () => {
@@ -198,8 +199,14 @@ test("timesheet delete preserves an entry URL for the permanent call", () => {
   assert.deepEqual(calls.find((c) => c[2] === "delete")!.slice(0, 5), ["timesheet", "entry", "delete", url, "--force"]);
 });
 
+test("timesheet delete rejects multiple entries before any call", () => {
+  const { status, calls } = run(["timesheet", "delete", "1", "2", "--confirm"], {});
+  assert.equal(status, 2);
+  assert.equal(calls.length, 0);
+});
+
 test("timesheet delete of a missing entry fails before deleting anything", () => {
-  const { stdout, status, calls } = run(["timesheet", "delete", "1", "2", "--confirm"], {
+  const { stdout, status, calls } = run(["timesheet", "delete", "1", "--confirm"], {
     "--version": VERSION,
     "timesheet entry show": { ok: false, error: "resource not found", code: "not_found" },
   });

@@ -122,7 +122,7 @@ Cross-project commands need no scope: `project list`, `report`, `timesheet repor
 - **Truncation**: descriptions and bodies are clipped (800 to 1500 chars) with the total size shown; `--full` on the same view command returns everything.
 - **Totals**: lists print `count: N of T total` when the underlying CLI reports a total, plus a hint to fetch the rest.
 - **Idempotent**: `todo done` on a completed todo reports `already done (no-op)` and exits 0; the same holds for `recording trash|archive|restore`, `hill track|untrack`, `timesheet update` with values that already match, and `hill update` that moves dots to where they already are (without a note).
-- **Confirmation gate**: trash, archive, restore, and `timesheet delete` (permanent) need `--confirm`. Without it they are a dry run.
+- **Confirmation gate**: trash, archive, restore, and `timesheet delete <entry id|url>` (one permanent deletion) need `--confirm`. Without it they are a dry run.
 - **Strict flags**: unknown flags and extra positionals exit 2 with the list of valid flags. `--json`, `--md`, and `--jq` are rejected with a hint since output is always TOON.
 - **Column names**: `card list --column`, `card create --column`, and `card move --to` accept a column name and resolve it to an id automatically when the project has one card table.
 - **Exit codes**: 0 success (including no-ops), 1 error, 2 usage error.

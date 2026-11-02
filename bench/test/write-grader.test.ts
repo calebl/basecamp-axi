@@ -155,11 +155,20 @@ test("read failures and unknown checks grade as failures", () => {
   assert.equal(gradeWrite({ check: "nope" }, reader()).task_success, false);
 });
 
-test("every write task names a known check and every probe covers both conditions", () => {
+test("task suites are complete and every probe covers both conditions", () => {
   const config = resolve(import.meta.dirname, "..", "config");
   const tasks = parseYaml(readFileSync(join(config, "tasks.yaml"), "utf-8")).tasks as Record<string, any>;
+  const read = Object.entries(tasks).filter(([, t]) => t.suite !== "write");
   const write = Object.entries(tasks).filter(([, t]) => t.suite === "write");
+  assert.ok(read.length >= 12, `expected at least 12 read tasks, found ${read.length}`);
   assert.ok(write.length >= 10, `expected at least 10 write tasks, found ${write.length}`);
+  for (const id of ["timesheet_entry_view", "hill_progress_updates"]) {
+    const task = tasks[id];
+    assert.ok(task, `${id}: missing read task`);
+    assert.notEqual(task.suite, "write", `${id}: must be in the read suite`);
+    assert.equal(task.category, "multi_step", `${id}: expected multi-step retrieval`);
+    assert.match(task.grading?.grading_hint ?? "", /ground truth must be captured/i, `${id}: missing ground-truth capture requirement`);
+  }
   for (const [id, t] of write) {
     assert.ok(CHECKS[t.grading?.check], `${id}: unknown check ${t.grading?.check}`);
     assert.match(t.prompt, /\{project\}/, `${id}: prompt must name the sandbox project`);

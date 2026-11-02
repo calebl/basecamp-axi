@@ -89,6 +89,24 @@ tasks:
     grading:
       grading_hint: "It is a message in project 48189809, recording id 10126503472, comment id 10141576401 (the URL fragment). The message title is 'Advanced Warehousing'."
 
+  timesheet_entry_view:
+    category: multi_step
+    prompt: >
+      In Basecamp project 48189809, find the most recent timesheet entry, view
+      that individual entry, and report its entry id, date, hours, person,
+      item title, and description.
+    grading:
+      grading_hint: "The answer must identify one individually viewed timesheet entry and report its entry id, date, hours, person, item title, and description. Ground truth must be captured from account 6068025 immediately before the next benchmark run and this note replaced with those exact values."
+
+  hill_progress_updates:
+    category: multi_step
+    prompt: >
+      In Basecamp project 48189809, read the hill chart's progress updates and
+      report the most recent update's id, author, time, note, and every dot's
+      to-do list name and position.
+    grading:
+      grading_hint: "The answer must report the most recent hill chart progress update with its id, author, time, note, and every dot's list name and numeric position. Ground truth must be captured from account 6068025 immediately before the next benchmark run and this note replaced with those exact values."
+
   # ── Category C: Error recovery ─────────────────────────────────
 
   nonexistent_project:

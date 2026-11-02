@@ -23,7 +23,7 @@ subcommands:
     --description <text>            Note about the work
     --person <id|name|email|me>     Whose time it is; default you
   update <entry id|url>             Change hours, date, description, or person (same flags as create)
-  delete <entry id|url>... --confirm  Delete permanently (cannot be undone or restored)
+  delete <entry id|url> --confirm   Delete permanently (cannot be undone or restored)
 examples:
   basecamp-axi timesheet list --in 48189809
   basecamp-axi timesheet create 10170015169 --hours 1:30 --description "Review"
@@ -296,42 +296,34 @@ async function update(args: string[], ctx: CliContext | undefined): Promise<stri
 }
 
 async function remove(args: string[], ctx: CliContext | undefined): Promise<string> {
-  const parsed = parseArgs(args, DELETE_FLAGS, { command: "timesheet delete", maxPositionals: Infinity });
-  if (parsed.positionals.length === 0) requirePositional(parsed, 0, "entry id|url", "basecamp-axi timesheet delete <entry id|url>... --confirm");
-  const ids = parsed.positionals.flatMap((p) => p.split(",")).filter(Boolean);
+  const parsed = parseArgs(args, DELETE_FLAGS, { command: "timesheet delete", maxPositionals: 1 });
+  const ref = requirePositional(parsed, 0, "entry id|url", "basecamp-axi timesheet delete <entry id|url> --confirm");
   await requireCliVersion(ENTRY_MIN_CLI, "timesheet delete");
 
-  // Look each entry up first: the dry run names what would go, and a missing id fails before anything is deleted.
-  const entries: Row[] = [];
-  for (const id of ids) {
-    try {
-      entries.push({ ...(await show(id, ctx)), ref: id });
-    } catch (error) {
-      if (error instanceof AxiError && error.code === "NOT_FOUND") {
-        throw new AxiError(`Timesheet entry ${id} not found`, "NOT_FOUND", [
-          "It may already be deleted; run `basecamp-axi timesheet list --in <project>` to check",
-        ]);
-      }
-      throw error;
+  let entry: Row;
+  try {
+    entry = await show(ref, ctx);
+  } catch (error) {
+    if (error instanceof AxiError && error.code === "NOT_FOUND") {
+      throw new AxiError(`Timesheet entry ${ref} not found`, "NOT_FOUND", [
+        "It may already be deleted; run `basecamp-axi timesheet list --in <project>` to check",
+      ]);
     }
+    throw error;
   }
   const schema: Schema = { id: (e) => e.id, date: (e) => e.date, hours: (e) => e.hours, person: (e) => e.person?.name, item: (e) => itemLabel(e) };
 
   if (!bool(parsed, "--confirm")) {
     return renderOutput([
       "delete: not applied (needs --confirm)",
-      renderList("would_delete", entries, schema),
-      renderHelp([`Run \`basecamp-axi timesheet delete ${ids.join(" ")} --confirm\` to delete permanently (entries cannot be restored)`]),
+      renderList("would_delete", [entry], schema),
+      renderHelp([`Run \`basecamp-axi timesheet delete ${ref} --confirm\` to delete permanently (entries cannot be restored)`]),
     ]);
   }
 
-  const rows: Row[] = [];
-  for (const e of entries) {
-    await ts(["entry", "delete", String(e.ref), "--force"], { project: ctx?.project, account: ctx?.account });
-    rows.push({ ...e, result: "deleted" });
-  }
+  await ts(["entry", "delete", ref, "--force"], { project: ctx?.project, account: ctx?.account });
   return renderOutput([
-    renderList("entries", rows, { ...schema, result: (e) => e.result }),
+    renderList("entries", [{ ...entry, result: "deleted" }], { ...schema, result: (e) => e.result }),
     renderHelp([`Run \`basecamp-axi timesheet create <item id> --hours <h>${projectFlag(ctx)}\` to log time again`]),
   ]);
 }
