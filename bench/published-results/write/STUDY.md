@@ -3,9 +3,11 @@
 **Agent**: Claude Sonnet 5.5 (`claude-sonnet-5-5`) in headless Claude Code with scoped Bash permissions
 **Grading**: read back from Basecamp after each run (no LLM judge)
 **Repeats**: 1 per condition × task
-**Total**: 22 trials, 24 agent sessions (`rerun_no_duplicate` runs twice), $0.82
-**Date**: 2026-10-23
-**Tools**: basecamp CLI 0.14.0, basecamp-axi 0.1.0 (this checkout's build)
+**Total**: 22 trials, 24 agent sessions (`rerun_no_duplicate` runs twice), $0.57
+**Date**: 2026-11-01
+**Tools**: basecamp CLI 0.21.0, basecamp-axi 0.2.0 (this checkout's build)
+
+This rerun follows basecamp-axi 0.2.0, which added `subtask create` and `upload`. The two basecamp-axi failures in the previous run were on exactly those tasks. Tasks, seeds, grader, model and harness are unchanged. The previous run (2026-10-23, basecamp-axi 0.1.0, basecamp CLI 0.14.0, $0.82) is kept in [`history/2026-10-23-claude-sonnet-5-5/`](history/2026-10-23-claude-sonnet-5-5/STUDY.md).
 
 ## Setup
 
@@ -17,29 +19,29 @@ Conditions and permissions match the read suite: each agent may run only its own
 
 | Condition | Success | Avg input tokens | Avg output tokens | Avg cost | Total cost | Avg duration | Avg turns |
 | --------- | ------- | ---------------- | ----------------- | -------- | ---------- | ------------ | --------- |
-| **axi**   | 9/11    | 83,967           | 377               | $0.028   | $0.31      | 8.1s         | 4         |
-| cli       | 10/11   | 125,552          | 593               | $0.047   | $0.52      | 11.3s        | 5         |
+| **axi**   | 10/11   | 80,869           | 324               | $0.019   | $0.21      | 6.2s         | 4         |
+| cli       | 10/11   | 99,346           | 436               | $0.033   | $0.36      | 7.7s         | 4         |
 
-On the nine tasks both tools support (everything except `todo_with_subtasks` and `file_upload`), both conditions passed 9/9. Against the raw CLI, basecamp-axi averaged:
+Both conditions failed only `todo_with_subtasks`. On the ten tasks both passed, basecamp-axi averaged, against the raw CLI:
 
-- **Cost:** $0.027 against $0.049 per task, 44% less.
-- **Input tokens:** 84,940 against 132,176, 36% fewer.
-- **Turns:** 3.9 against 5.4.
-- **Wall-clock time:** 7.9s against 11.1s, 29% faster.
+- **Cost:** $0.019 against $0.032 per task, 41% less.
+- **Input tokens:** 80,369 against 90,140, 11% fewer.
+- **Turns:** 3.9 against 4.0.
+- **Wall-clock time:** 6.1s against 7.1s, 14% faster.
 
 | Task | cli | axi |
 | ---- | --- | --- |
-| todo_create (assignee + due date) | PASS, $0.037 | PASS, $0.031 |
-| todo_with_subtasks | FAIL, $0.048 | FAIL, $0.037 |
-| todo_complete | PASS, $0.038 | PASS, $0.021 |
-| todo_comment | PASS, $0.041 | PASS, $0.028 |
-| card_create | PASS, $0.069 | PASS, $0.027 |
-| card_move | PASS, $0.043 | PASS, $0.027 |
-| message_post | PASS, $0.032 | PASS, $0.022 |
-| message_reply | PASS, $0.036 | PASS, $0.023 |
-| chat_post | PASS, $0.026 | PASS, $0.021 |
-| file_upload | PASS, $0.031 | FAIL, $0.026 |
-| rerun_no_duplicate (2 sessions) | PASS, $0.116, 17 turns | PASS, $0.045, 7 turns |
+| todo_create (assignee + due date) | PASS, $0.068 | PASS, $0.021 |
+| todo_with_subtasks | FAIL, $0.047, 8 turns | FAIL, $0.022, 4 turns |
+| todo_complete | PASS, $0.017 | PASS, $0.014 |
+| todo_comment | PASS, $0.031 | PASS, $0.019 |
+| card_create | PASS, $0.048 | PASS, $0.019 |
+| card_move | PASS, $0.025 | PASS, $0.018 |
+| message_post | PASS, $0.022 | PASS, $0.015 |
+| message_reply | PASS, $0.025 | PASS, $0.015 |
+| chat_post | PASS, $0.017 | PASS, $0.014 |
+| file_upload | PASS, $0.020 | PASS, $0.017 |
+| rerun_no_duplicate (2 sessions) | PASS, $0.046, 7 turns | PASS, $0.033, 7 turns |
 
 ## Safety probes
 
@@ -52,14 +54,16 @@ These run without a model. Each probe seeds a to-do, runs the condition's own co
 
 ## Findings
 
-- **Re-running a task is where the gap is widest.** `rerun_no_duplicate` asks the agent twice, in fresh sessions, to make sure a to-do exists. Neither condition created a duplicate. The cli agent spent 17 turns and $0.12 checking lists in JSON, while the axi agent spent 7 turns and $0.05.
-- **basecamp-axi has no subtask or upload command.** The axi agent could not complete `todo_with_subtasks` or `file_upload`; both are follow-ups for the wrapper. The raw CLI handled the upload with `basecamp upload`.
-- **Neither agent found native subtasks.** Both treated "subtasks" as separate to-dos in the same list. The raw CLI does have `basecamp subtasks create`, but `basecamp todos --help` does not point to it. In both runs the shell loop that would have created the extra to-dos was also denied by the scoped allowlist (see below). The grader requires real subtasks, so the outcome would have been a failure either way.
+- **Uploads now work through basecamp-axi.** The axi agent read `basecamp-axi upload --help` and uploaded `site-plan.txt` with `basecamp-axi upload ./site-plan.txt --in <project>`, in 4 turns.
+- **Both agents found native subtasks this time, and both were stopped by the allowlist.** After `basecamp-axi todo create`, the help hint pointed to `basecamp-axi subtask create <id> "<title>"`. The axi agent found it with its second command. The cli agent found `basecamp subtasks create` with its fifth, by searching `basecamp commands`; `basecamp todos --help` still does not mention subtasks. Both then tried to add the three subtasks in one shell `for` loop. The scoped allowlist denies loops (see methodology notes), so each agent stopped and reported that it had created the parent to-do but no subtasks. With three separate calls, either agent would have passed. Neither tried that, so this task fails in both conditions because of the harness, not because a command is missing.
+- **Re-running a task no longer separates the tools.** Neither condition created a duplicate in `rerun_no_duplicate`. Both took 7 turns, and the axi agent cost $0.033 against $0.046. In the previous run the cli agent took 17 turns.
+- **The first tasks inflate the cli cost.** The cli condition runs first for each task. Its `todo_create` and `card_create` sessions had 65% and 87% cache hits, against 92–97% elsewhere, so part of the cost gap on those two tasks is prompt-cache warm-up, not tool output.
 - **Only basecamp-axi refuses a trash without confirmation.** The raw CLI moves the item to the trash straight away; basecamp-axi treats a trash without `--confirm` as a dry run.
 
 ## Methodology notes
 
-- The agent model differs from the read suite. Write sessions with `claude-sonnet-5` measured $0.11 to $0.21 each in development, which would put a full matrix near $3 and over the $2 cap. `claude-sonnet-5-5` measured about $0.05 per session. Compare write numbers with each other, not with the read table.
-- Two harness changes landed with this suite and apply to both suites. Each condition now reuses one fixed workspace path, because a per-run path in the system prompt defeated prompt caching across runs. MCP servers are now disabled (`--strict-mcp-config`), because a claude.ai Basecamp connector gave the agent a third route to Basecamp. The published read results predate both changes.
-- The scoped allowlist only matches commands that start with an allowed binary. Shell loops and variable assignments (`for t in ...; do basecamp ...`, `L=123; basecamp-axi ...`) are therefore denied, the same way `/tmp` redirects were in the read suite. This affected both conditions in `todo_with_subtasks`, and the axi condition in `file_upload`.
+- The agent model differs from the read suite's earlier runs but matches its current published run. Write sessions with `claude-sonnet-5` measured $0.11 to $0.21 each in development; `claude-sonnet-5-5` measured about $0.02 per session in this run.
+- This run's spend cap was $1.50, set in `sandbox.yaml` for this run only; the committed default stays $2.00. The pre-start estimate was 24 × $0.06 = $1.44; actual spend was $0.57.
+- The scoped allowlist only matches commands that start with an allowed binary. Shell loops and variable assignments (`for t in ...; do basecamp ...`, `L=123; basecamp-axi ...`) are therefore denied, the same way `/tmp` redirects were in the read suite. This affected both conditions in `todo_with_subtasks`.
+- Each condition reuses one fixed workspace path, and MCP servers are disabled (`--strict-mcp-config`), as in the previous write run.
 - Per-run artifacts (`agent_output.txt`, `grade.json`) live under `results/write/` locally and are not committed.
