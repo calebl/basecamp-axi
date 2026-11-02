@@ -14,7 +14,8 @@ import { resolve, join } from "node:path";
 import { parse as parseYaml } from "yaml";
 import type { AgentBackend, ConditionDef, ConditionId, ProbeResult, SandboxDef, Suite, TaskDef } from "./types.ts";
 import { preflightAxiBuild, runOne } from "./runner.ts";
-import { grade } from "./grader.ts";
+import { judge } from "./grader.ts";
+import { applyRegrade, planRegrade } from "./regrade.ts";
 import { resultsDir, writeReports } from "./reporter.ts";
 import { type Sandbox, openSandbox, resetSandbox } from "./sandbox.ts";
 import { runProbes } from "./probes.ts";
@@ -125,22 +126,22 @@ function cmdRegrade(argv: string[]): void {
     console.error("Usage: bench regrade --condition <id> --task <id,id,...>");
     process.exit(1);
   }
-  const tasks = loadTasks("read");
-  const taskIds = args.task.split(",");
   const resultsPath = join(resultsDir("read"), "results.jsonl");
-  const rows = readFileSync(resultsPath, "utf-8").split("\n").filter((l) => l.trim()).map((l) => JSON.parse(l));
-  for (const row of rows) {
-    if (row.condition !== args.condition || !taskIds.includes(row.task)) continue;
-    const task = tasks.get(row.task);
-    if (!task) continue;
-    const artifactDir = join(resultsDir("read"), row.condition, row.task, `run${row.run}`);
-    const trajectory = readFileSync(join(artifactDir, "agent_output.txt"), "utf-8");
-    const before = row.grade.task_success;
-    row.grade = grade(task.grading, task.prompt, trajectory, (args.agent ?? "claude") as AgentBackend, artifactDir);
-    writeFileSync(join(artifactDir, "grade.json"), JSON.stringify(row.grade, null, 2));
-    console.log(`[${row.condition}] ${row.task} (run ${row.run}): ${before ? "PASS" : "FAIL"} -> ${row.grade.task_success ? "PASS" : "FAIL"} ($${(row.grade.judge_cost_usd ?? 0).toFixed(4)} judge)`);
+  const rows = existsSync(resultsPath)
+    ? readFileSync(resultsPath, "utf-8").split("\n").filter((l) => l.trim()).map((l) => JSON.parse(l))
+    : [];
+  let items;
+  try {
+    items = planRegrade(rows, loadTasks("read"), args.condition, args.task.split(","), resultsDir("read"));
+  } catch (err) {
+    console.error((err as Error).message);
+    process.exit(1);
   }
-  writeFileSync(resultsPath, rows.map((r) => JSON.stringify(r)).join("\n") + "\n");
+  const backend = (args.agent ?? "claude") as AgentBackend;
+  const done = applyRegrade(rows, items, (task, trajectory) => judge(task.grading, task.prompt, trajectory, backend), resultsPath);
+  for (const { item, before, judged } of done) {
+    console.log(`[${item.row.condition}] ${item.row.task} (run ${item.row.run}): ${before ? "PASS" : "FAIL"} -> ${judged.result.task_success ? "PASS" : "FAIL"} ($${(judged.result.judge_cost_usd ?? 0).toFixed(4)} judge)`);
+  }
   writeReports("read", coverageTasks());
 }
 

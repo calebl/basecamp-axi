@@ -27,20 +27,33 @@ const BENCH_ROOT = resolve(import.meta.dirname, "..");
 const REPO_ROOT = resolve(BENCH_ROOT, "..");
 
 const SHIM_DIR = join(BENCH_ROOT, "results", ".bin");
+const BUILT_AXI = join(REPO_ROOT, "dist", "bin", "basecamp-axi.js");
+
+/** Where the axi build and its shim live; tests point these at a temporary directory. */
+export interface AxiBuild {
+  built: string;
+  shimDir: string;
+}
+
+const DEFAULT_BUILD: AxiBuild = { built: BUILT_AXI, shimDir: SHIM_DIR };
 
 /**
  * Put this checkout's basecamp-axi build first on PATH so the axi condition
  * measures the code under test rather than whatever is installed globally.
- * Falls back to PATH as-is when the repo has not been built.
+ * Falls back to PATH as-is when the repo has not been built, and removes a
+ * shim left from an earlier build so it cannot pass for the missing one.
  */
-export function agentPath(): string {
-  const built = join(REPO_ROOT, "dist", "bin", "basecamp-axi.js");
-  if (!existsSync(built)) return process.env.PATH ?? "";
-  mkdirSync(SHIM_DIR, { recursive: true });
-  const shim = join(SHIM_DIR, "basecamp-axi");
-  writeFileSync(shim, `#!/bin/sh\nexec node "${built}" "$@"\n`);
+export function agentPath(build: AxiBuild = DEFAULT_BUILD): string {
+  const shim = join(build.shimDir, "basecamp-axi");
+  if (!existsSync(build.built)) {
+    rmSync(shim, { force: true });
+    rmSync(join(build.shimDir, "env.sh"), { force: true });
+    return process.env.PATH ?? "";
+  }
+  mkdirSync(build.shimDir, { recursive: true });
+  writeFileSync(shim, `#!/bin/sh\nexec node "${build.built}" "$@"\n`);
   chmodSync(shim, 0o755);
-  return [SHIM_DIR, process.env.PATH ?? ""].join(delimiter);
+  return [build.shimDir, process.env.PATH ?? ""].join(delimiter);
 }
 
 /**
@@ -50,11 +63,11 @@ export function agentPath(): string {
  * of the shim. CLAUDE_ENV_FILE is sourced after the profile before every
  * command, so it puts the shim first again.
  */
-export function agentEnv(base: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
-  const path = agentPath();
-  if (!existsSync(join(SHIM_DIR, "basecamp-axi"))) return { ...base, PATH: path };
-  const envFile = join(SHIM_DIR, "env.sh");
-  writeFileSync(envFile, `export PATH=${shellQuote(SHIM_DIR)}:"$PATH"\n`);
+export function agentEnv(base: NodeJS.ProcessEnv, build: AxiBuild = DEFAULT_BUILD): NodeJS.ProcessEnv {
+  const path = agentPath(build);
+  if (!existsSync(build.built)) return { ...base, PATH: path };
+  const envFile = join(build.shimDir, "env.sh");
+  writeFileSync(envFile, `export PATH=${shellQuote(build.shimDir)}:"$PATH"\n`);
   return { ...base, PATH: path, CLAUDE_ENV_FILE: envFile };
 }
 
@@ -74,12 +87,14 @@ export interface PreflightResult {
  * this measured basecamp-axi 0.2.0 while the checkout held 0.3.0. One short
  * session on a small model (BENCH_PREFLIGHT_MODEL) costs well under a cent.
  */
-export function preflightAxiBuild(base: NodeJS.ProcessEnv = process.env): PreflightResult {
-  const shim = join(SHIM_DIR, "basecamp-axi");
-  const env = { ...agentEnv(base), ENABLE_CLAUDEAI_MCP_SERVERS: "false" };
-  if (!existsSync(shim)) {
+export function preflightAxiBuild(base: NodeJS.ProcessEnv = process.env, build: AxiBuild = DEFAULT_BUILD): PreflightResult {
+  const shim = join(build.shimDir, "basecamp-axi");
+  // Check the build itself, not the shim: a shim can outlive the dist/ it points at.
+  if (!existsSync(build.built)) {
+    agentPath(build); // drops any stale shim
     throw new Error("No basecamp-axi build to benchmark: run `npm run build` in the repository root first.");
   }
+  const env = { ...agentEnv(base, build), ENABLE_CLAUDEAI_MCP_SERVERS: "false" };
   const workspace = join(BENCH_ROOT, "results", "preflight");
   rmSync(workspace, { recursive: true, force: true });
   mkdirSync(workspace, { recursive: true });
