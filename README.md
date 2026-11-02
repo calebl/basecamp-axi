@@ -29,7 +29,7 @@ basecamp-axi used 22% fewer input tokens, cost 27% less, and finished 19% faster
 - replying again in a fresh session without posting twice;
 - being asked to complete a to-do that is in the trash.
 
-basecamp-axi has no check-in command yet, so it fails the check-in task until one ships. The suite also has three timesheet tasks and one hill-chart task; these are coverage for those commands, not realism, and reports label them so. The agent is `claude-sonnet-5-5`, with 1 repeat. Success is checked by reading Basecamp back after each run; a duplicate counts as a failure.
+The sandbox now keeps a second card table, as most real projects do, so the card tasks name their table. Card rows are not comparable row by row with the published run. basecamp-axi has no check-in command yet, so it fails the check-in task until one ships. The suite also has three timesheet tasks and one hill-chart task; these are coverage for those commands, not realism, and reports label them so. The agent is `claude-sonnet-5-5`, with 1 repeat. Success is checked by reading Basecamp back after each run; a duplicate counts as a failure.
 
 | Condition        | Success | Avg Input Tokens | Avg Cost/Task | Avg Duration | Avg Turns |
 | ---------------- | ------- | ---------------- | ------------- | ------------ | --------- |

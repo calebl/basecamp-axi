@@ -178,7 +178,7 @@ tasks:
     category: write
     prompt: >
       In Basecamp project {project}, add a card "Fix login bug" to the
-      "In progress" column of the card table.
+      "In progress" column of the "Card Table" card table.
     grading:
       check: card_in_column
       title: Fix login bug
@@ -188,8 +188,8 @@ tasks:
     suite: write
     category: write
     prompt: >
-      In Basecamp project {project}, move the card "Write tests" to the
-      "Done" column.
+      In Basecamp project {project}, on the "Card Table" card table, move the
+      card "Write tests" to the "Done" column.
     seed:
       cards:
         - title: Write tests
@@ -354,7 +354,7 @@ tasks:
     suite: write
     category: write
     prompt: >
-      In Basecamp project {project}, rename the card "Write tests" to
+      In Basecamp project {project}, on the "Card Table" card table, rename the card "Write tests" to
       "Write integration tests" and set its description to
       "Cover the sync path."
     seed:

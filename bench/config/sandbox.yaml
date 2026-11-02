@@ -14,7 +14,8 @@ project_name: "basecamp-axi bench"
 # Card-table columns the tasks refer to; created when missing.
 columns: ["Up next", "In progress", "Done"]
 
-# A second card table, kept in the project between runs (card_move_two_tables).
+# A second card table, kept in the project between runs, so every card task runs
+# in a two-table project as most real ones are; card prompts name their table.
 # It cannot be created per task: Basecamp keeps a removed table in the dock for
 # days and the basecamp CLI still counts it, so it would leak into later tasks.
 card_tables:
